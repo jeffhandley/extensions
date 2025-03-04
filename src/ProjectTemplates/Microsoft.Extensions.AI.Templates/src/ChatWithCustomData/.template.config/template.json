@@ -268,9 +268,49 @@
       "onlyIf": [{
         "after": "localhost:"
       }]
+    },
+    "vectorStoreIndexNameReplacer": {
+      "type": "derived",
+      "valueSource": "name",
+      "valueTransform": "vectorStoreIndexNameTransform",
+      "replaces": "$$VectorStoreIndexName$$"
     }
   },
-  
+  "forms": {
+    "vectorStoreIndexNameTransform": {
+      "identifier": "chain",
+      "steps": [
+        "vectorStoreIndexName_Prefix",
+        "lowerCaseForm",
+        "vectorStoreIndexName_ReplaceIllegalCharacters",
+        "vectoreStoreIndexName_CollapseConsecutiveDashesUnderscores",
+        "truncateTo128Characters"
+      ]
+    },
+    "vectorStoreIndexName_Prefix": {
+      "identifier": "replace",
+      "pattern": "^(.*)$",
+      "replacement": "data-$1"
+    },
+    "lowerCaseForm": {
+      "identifier": "lowerCase"
+    },
+    "vectorStoreIndexName_ReplaceIllegalCharacters": {
+      "identifier": "replace",
+      "pattern": "[^a-z0-9-_]",
+      "replacement": "_"
+    },
+    "vectoreStoreIndexName_CollapseConsecutiveDashesUnderscores": {
+      "identifier": "replace",
+      "pattern": "([-_])\\1+",
+      "replacement": "$1"
+    },
+    "truncateTo128Characters": {
+      "identifier": "replace",
+      "pattern": "^(.{0,128}).*",
+      "replacement": "$1"
+    }
+  },
   "postActions": [{
     "condition": "(hostIdentifier != \"dotnetcli\")",
     "description": "Opens README file in the editor",
