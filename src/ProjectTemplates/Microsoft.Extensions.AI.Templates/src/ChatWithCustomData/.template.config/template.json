@@ -7,7 +7,9 @@
   "description": "A project template for creating an AI chat application, which uses retrieval-augmented generation (RAG) to chat with your own data.",
   "shortName": "aichatweb",
   "defaultName": "ChatApp",
-  "sourceName": "ChatWithCustomData.Web", // TODO: When we support multi-project output, this needs to change to ChatWithCustomData, then we need some other technique to make it avoid emitting a .Web suffix in the single-project case
+  // The sourceName needs to include characters illegal in namespaces to ensure the .styles.css asset retains the 'identity' form of the name (where spaces and dashes are allowed)
+  // TODO: When we support multi-project output, this needs to change to ChatWithCustomData-CSharp, then we need some other technique to make it avoid emitting a .Web suffix in the single-project case.
+  "sourceName": "ChatWithCustomData.Web-CSharp",
   "tags": {
     "language": "C#",
     "type": "project"
@@ -16,7 +18,7 @@
     "d5681fae-b21b-4114-b781-48180f08c0c4"
   ],
   "primaryOutputs": [
-    {"path": "./ChatWithCustomData.Web.csproj"},
+    {"path": "./ChatWithCustomData.Web-CSharp.csproj"},
     {"path": "./README.md"}
   ],
   "sources": [{
@@ -28,7 +30,7 @@
         // Later when we support multi-project output with Qdrant on Docker, we'll also emit
         // a second project ChatWithCustomData.AppHost and hence will suppress this renaming.
         "rename": {
-          "ChatWithCustomData.Web/": "./"
+          "ChatWithCustomData.Web-CSharp/": "./"
         }
       }
     ]

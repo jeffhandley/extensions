@@ -2,7 +2,7 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 
-namespace ChatWithCustomData.Web.Services.Ingestion;
+namespace ChatWithCustomData.Web_CSharp.Services.Ingestion;
 
 public class DataIngestor(
     ILogger<DataIngestor> logger,

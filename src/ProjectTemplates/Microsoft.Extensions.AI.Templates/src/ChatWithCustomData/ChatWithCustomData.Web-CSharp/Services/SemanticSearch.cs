@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
 
-namespace ChatWithCustomData.Web.Services;
+namespace ChatWithCustomData.Web_CSharp.Services;
 
 public class SemanticSearch(
     IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
