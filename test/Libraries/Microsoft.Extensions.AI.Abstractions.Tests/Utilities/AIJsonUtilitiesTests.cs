@@ -73,10 +73,7 @@ public static partial class AIJsonUtilitiesTests
     public static void AIJsonSchemaCreateOptions_DefaultInstance_ReturnsExpectedValues(bool useSingleton)
     {
         AIJsonSchemaCreateOptions options = useSingleton ? AIJsonSchemaCreateOptions.Default : new AIJsonSchemaCreateOptions();
-        Assert.True(options.IncludeTypeInEnumSchemas);
-        Assert.False(options.DisallowAdditionalProperties);
         Assert.False(options.IncludeSchemaKeyword);
-        Assert.False(options.RequireAllProperties);
         Assert.Null(options.TransformSchemaNode);
         Assert.Null(options.TransformOptions);
     }
@@ -478,6 +475,20 @@ public static partial class AIJsonUtilitiesTests
     }
 
     [Fact]
+    public static void CreateJsonSchema_NullableEnum_IncludesTypeKeyword()
+    {
+        JsonElement expectedSchema = JsonDocument.Parse("""
+        {
+            "type": ["string", "null"],
+            "enum": ["A", "B", null]
+        }
+        """).RootElement;
+
+        JsonElement schema = AIJsonUtilities.CreateJsonSchema(typeof(MyEnumValue?), serializerOptions: JsonContext.Default.Options);
+        AssertDeepEquals(expectedSchema, schema);
+    }
+
+    [Fact]
     public static void AddAIContentType_DerivedAIContent()
     {
         JsonSerializerOptions options = new()
@@ -846,6 +857,7 @@ public static partial class AIJsonUtilitiesTests
     [JsonSerializable(typeof(DerivedAIContent))]
     [JsonSerializable(typeof(MyPoco))]
     [JsonSerializable(typeof(PocoWithTypesWithOpenAIUnsupportedKeywords))]
+    [JsonSerializable(typeof(MyEnumValue?))]
     private partial class JsonContext : JsonSerializerContext;
 
     private static bool DeepEquals(JsonElement element1, JsonElement element2)
