@@ -9,6 +9,10 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Caching.SqlServer;
+using Microsoft.Extensions.Caching.StackExchangeRedis;
+
+
 
 #if NET9_0_OR_GREATER
 using Microsoft.Extensions.Configuration;
@@ -49,6 +53,50 @@ public class ServiceConstructionTests : IClassFixture<TestEventListener>
         Assert.Equal(TimeSpan.FromSeconds(120), defaults.Expiration);
         Assert.Equal(HybridCacheEntryFlags.DisableLocalCacheRead, defaults.Flags);
         Assert.Null(defaults.LocalCacheExpiration); // wasn't specified
+    }
+
+    [Fact]
+    public void CanCreateMultipleKeyedServices()
+    {
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IDistributedCache, RedisCache>(typeof(RedisCache));
+        services.AddKeyedSingleton<IDistributedCache, SqlServerCache>(typeof(SqlServerCache));
+        services.AddKeyedHybridCache("HybridRedis", options => options.DistributedCacheServiceKey = typeof(RedisCache));
+        services.AddKeyedHybridCache("HybridSqlServer", options => options.DistributedCacheServiceKey = typeof(SqlServerCache));
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var redisHybrid = Assert.IsType<DefaultHybridCache>(provider.GetRequiredKeyedService<HybridCache>("HybridRedis"));
+        var sqlHybrid = Assert.IsType<DefaultHybridCache>(provider.GetRequiredKeyedService<HybridCache>("HybridSqlServer"));
+
+        Assert.NotSame(redisHybrid, sqlHybrid);
+        Assert.IsType<RedisCache>(redisHybrid.BackendCache);
+        Assert.IsType<SqlServerCache>(sqlHybrid.BackendCache);
+    }
+
+    [Fact]
+    public void CanCreateServiceWithKeyedDistributedCache()
+    {
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IDistributedCache, CustomMemoryDistributedCache>("MyCache");
+        services.AddHybridCache(options => options.DistributedCacheServiceKey = "MyCache");
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var obj = Assert.IsType<DefaultHybridCache>(provider.GetService<HybridCache>());
+        Assert.NotNull(obj.BackendCache);
+        Assert.IsType<CustomMemoryDistributedCache>(obj.BackendCache);
+        Assert.Same(provider.GetRequiredKeyedService<IDistributedCache>("MyCache"), obj.BackendCache);
+    }
+
+    [Fact]
+    public void CanCreateKeyedServiceWithKeyedDistributedCache()
+    {
+        var services = new ServiceCollection();
+        services.AddKeyedSingleton<IDistributedCache, CustomMemoryDistributedCache>("MyCache");
+        services.AddKeyedHybridCache("MyHybridCache", options => options.DistributedCacheServiceKey = "MyCache");
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var obj = Assert.IsType<DefaultHybridCache>(provider.GetRequiredKeyedService<HybridCache>("MyHybridCache"));
+        Assert.NotNull(obj.BackendCache);
+        Assert.IsType<CustomMemoryDistributedCache>(obj.BackendCache);
+        Assert.Same(provider.GetRequiredKeyedService<IDistributedCache>("MyCache"), obj.BackendCache);
     }
 
 #if NET9_0_OR_GREATER // for Bind API

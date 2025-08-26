@@ -38,7 +38,31 @@ public static class HybridCacheServiceExtensions
         services.TryAddSingleton<IHybridCacheSerializerFactory, DefaultJsonSerializerFactory>();
         services.TryAddSingleton<IHybridCacheSerializer<string>>(InbuiltTypeSerializer.Instance);
         services.TryAddSingleton<IHybridCacheSerializer<byte[]>>(InbuiltTypeSerializer.Instance);
+
         services.TryAddSingleton<HybridCache, DefaultHybridCache>();
+        return new HybridCacheBuilder(services);
+    }
+
+    // Add a keyed cache instance
+    public static IHybridCacheBuilder AddKeyedHybridCache(this IServiceCollection services, object? serviceKey, Action<HybridCacheOptions> setupAction)
+    {
+        _ = Throw.IfNull(setupAction);
+        _ = AddKeyedHybridCache(services, serviceKey);
+        //_ = services.Configure(serviceKey, setupAction);
+        return new HybridCacheBuilder(services);
+    }
+
+    public static IHybridCacheBuilder AddKeyedHybridCache(this IServiceCollection services, object? serviceKey)
+    {
+        _ = Throw.IfNull(services);
+        services.TryAddKeyedSingleton(TimeProvider.System, serviceKey);
+        //_ = services.AddOptions<HybridCacheOptions>(serviceKey);
+        _ = services.AddMemoryCache();
+        services.TryAddSingleton<IHybridCacheSerializerFactory, DefaultJsonSerializerFactory>();
+        services.TryAddSingleton<IHybridCacheSerializer<string>>(InbuiltTypeSerializer.Instance);
+        services.TryAddSingleton<IHybridCacheSerializer<byte[]>>(InbuiltTypeSerializer.Instance);
+
+        services.TryAddKeyedSingleton<HybridCache, DefaultHybridCache>(serviceKey);
         return new HybridCacheBuilder(services);
     }
 }

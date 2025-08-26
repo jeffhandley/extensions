@@ -71,7 +71,11 @@ internal sealed partial class DefaultHybridCache : HybridCache
         _options = options.Value;
         _logger = services.GetService<ILoggerFactory>()?.CreateLogger(typeof(HybridCache)) ?? NullLogger.Instance;
         _clock = services.GetService<TimeProvider>() ?? TimeProvider.System;
-        _backendCache = services.GetService<IDistributedCache>(); // note optional
+
+        // Get the (optional) backend cache; if none, we will operate as a pure L1 cache
+        _backendCache = _options.DistributedCacheServiceKey is not null
+            ? services.GetKeyedService<IDistributedCache>(_options.DistributedCacheServiceKey)
+            : services.GetService<IDistributedCache>();
 
         // ignore L2 if it is really just the same L1, wrapped
         // (note not just an "is" test; if someone has a custom subclass, who knows what it does?)
