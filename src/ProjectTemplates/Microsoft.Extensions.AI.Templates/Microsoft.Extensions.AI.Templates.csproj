@@ -48,7 +48,6 @@
     <TemplatePackageVersion Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <TemplatePackageVersion Include="Microsoft.SemanticKernel" Version="1.67.1" />
     <TemplatePackageVersion Include="Microsoft.SemanticKernel-Preview" Version="1.67.1-preview" />
-    <TemplatePackageVersion Include="ModelContextProtocol" Version="0.4.0-preview.3" />
     <TemplatePackageVersion Include="OllamaSharp" Version="5.4.11" />
     <TemplatePackageVersion Include="OpenTelemetry" Version="1.14.0" />
     <TemplatePackageVersion Include="PdfPig" Version="0.1.12" />
@@ -59,24 +58,14 @@
     <Compile Remove="**\*" />
 
     <Content
-      Include="templates\AIChatWeb-CSharp\**\*"
-      Exclude="templates\AIChatWeb-CSharp\**\*.csproj-in"
-      PackagePath="content\AIChatWeb-CSharp" />
+      Include="templates\**\*"
+      Exclude="templates\**\*.csproj-in"
+      PackagePath="content" />
 
     <TemplateContent
-      Include="templates\AIChatWeb-CSharp\**\*.csproj-in"
+      Include="templates\**\*.csproj-in"
       ChangeExtension=".csproj"
-      PackagePath="content\AIChatWeb-CSharp" />
-
-    <Content
-      Include="templates\McpServer-CSharp\**\*"
-      Exclude="templates\McpServer-CSharp\**\*.csproj-in"
-      PackagePath="content\McpServer-CSharp" />
-
-    <TemplateContent
-      Include="templates\McpServer-CSharp\**\*.csproj-in"
-      ChangeExtension=".csproj"
-      PackagePath="content\McpServer-CSharp" />
+      PackagePath="content" />
 
     <None
       Include="THIRD-PARTY-NOTICES.TXT"
