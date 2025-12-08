@@ -31,9 +31,9 @@
 
   <ItemGroup>
     <TemplatePackageVersion Include="Azure.Identity" Version="1.17.1" />
-    <TemplatePackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-preview.251114.1" />
-    <TemplatePackageVersion Include="Microsoft.Agents.AI.Hosting.OpenAI" Version="1.0.0-alpha.251114.1" />
-    <TemplatePackageVersion Include="OllamaSharp" Version="5.4.11" />
+    <TemplatePackageVersion Include="Microsoft.Agents.AI" Version="1.0.0-preview.251204.1" />
+    <TemplatePackageVersion Include="Microsoft.Agents.AI.Hosting.OpenAI" Version="1.0.0-alpha.251204.1" />
+    <TemplatePackageVersion Include="OllamaSharp" Version="5.4.12" />
   </ItemGroup>
 
   <ItemGroup>

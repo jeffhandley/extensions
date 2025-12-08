@@ -89,7 +89,7 @@ builder.AddWorkflow("publisher", (sp, key) => AgentWorkflowBuilder.BuildSequenti
     workflowName: key,
     sp.GetRequiredKeyedService<AIAgent>("writer"),
     sp.GetRequiredKeyedService<AIAgent>("editor")
-)).AddAsAIAgent();
+)).AddAsAIAgent("publisher-agent");
 
 // Register services for OpenAI responses and conversations (also required for DevUI)
 builder.Services.AddOpenAIResponses();
