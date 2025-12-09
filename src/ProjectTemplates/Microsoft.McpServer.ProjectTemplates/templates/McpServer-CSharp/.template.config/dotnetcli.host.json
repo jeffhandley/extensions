@@ -1,13 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/dotnetcli.host",
   "symbolInfo": {
-    "TargetFrameworkOverride": {
-      "isHidden": "true",
-      "longName": "target-framework-override",
-      "shortName": ""
-    },
-    "Framework": {
-      "longName": "framework"
+    "Transport": {
+      "longName": "transport",
+      "shortName": "t"
     },
     "NativeAot": {
       "longName": "aot",
@@ -16,6 +12,9 @@
     "SelfContained": {
       "longName": "self-contained",
       "shortName": ""
+    },
+    "Framework": {
+      "longName": "framework"
     }
   },
   "usageExamples": [

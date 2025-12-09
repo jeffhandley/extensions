@@ -23,7 +23,8 @@ public class McpServerSnapshotTests : TemplateSnapshotTestBase
     }
 
     [Theory]
-    [InlineData /* Defaults: --self-contained=true --aot=false --framework=net10.0 */]
+    [InlineData /* Defaults: --transport local --self-contained=true --aot=false --framework=net10.0 */]
+    [InlineData("--transport=remote")]
     [InlineData("--self-contained=false")]
     [InlineData("--aot=true")]
     [InlineData("--framework=net8.0")]
@@ -39,6 +40,8 @@ public class McpServerSnapshotTests : TemplateSnapshotTestBase
             templateName,
             templateArgs)
         .WithCustomScrubbers(ScrubbersDefinition.Empty
+            .AddUserSecretsScrubber()
+            .AddLocalhostPortScrubber()
             .AddPackageReferenceScrubber());
 
         VerificationEngine engine = new VerificationEngine(_log);
