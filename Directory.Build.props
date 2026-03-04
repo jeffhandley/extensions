@@ -2,6 +2,14 @@
 <Project>
   <Import Project="Sdk.props" Sdk="Microsoft.DotNet.Arcade.Sdk" />
 
+  <!-- Local build overrides for pack -->
+  <PropertyGroup>
+    <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/dotnet/extensions</RepositoryUrl>
+    <RepositoryCommit Condition="'$(RepositoryCommit)' == ''">local</RepositoryCommit>
+    <RepositoryType Condition="'$(RepositoryType)' == ''">git</RepositoryType>
+    <EnablePackageValidation>false</EnablePackageValidation>
+  </PropertyGroup>
+
   <!-- TFMs and their permutations -->
   <PropertyGroup>
     <TargetFrameworkName>net</TargetFrameworkName>
