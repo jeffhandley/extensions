@@ -23,9 +23,9 @@ using Sdk = OpenAI.Realtime;
 
 namespace Microsoft.Extensions.AI;
 
-/// <summary>Represents an <see cref="IRealtimeSession"/> for the OpenAI Realtime API over WebSocket.</summary>
+/// <summary>Represents an <see cref="IRealtimeClientSession"/> for the OpenAI Realtime API over WebSocket.</summary>
 [Experimental(DiagnosticIds.Experiments.AIRealTime, UrlFormat = DiagnosticIds.UrlFormat)]
-public sealed class OpenAIRealtimeSession : IRealtimeSession
+public sealed class OpenAIRealtimeSession : IRealtimeClientSession
 {
     /// <summary>The model to use for the session.</summary>
     private readonly string _model;
@@ -114,7 +114,7 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
     }
 
     /// <inheritdoc />
-    public async Task SendClientMessageAsync(RealtimeClientMessage message, CancellationToken cancellationToken = default)
+    public async Task SendAsync(RealtimeClientMessage message, CancellationToken cancellationToken = default)
     {
         _ = Throw.IfNull(message);
 
@@ -127,11 +127,11 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
         {
             switch (message)
             {
-                case RealtimeClientResponseCreateMessage responseCreate:
+                case RealtimeClientCreateResponseMessage responseCreate:
                     await SendResponseCreateAsync(responseCreate, cancellationToken).ConfigureAwait(false);
                     break;
 
-                case RealtimeClientConversationItemCreateMessage itemCreate:
+                case RealtimeClientCreateConversationItemMessage itemCreate:
                     await SendConversationItemCreateAsync(itemCreate, cancellationToken).ConfigureAwait(false);
                     break;
 
@@ -183,7 +183,7 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
     }
 
     /// <inheritdoc />
-    object? IRealtimeSession.GetService(Type serviceType, object? serviceKey)
+    object? IRealtimeClientSession.GetService(Type serviceType, object? serviceKey)
     {
         _ = Throw.IfNull(serviceType);
 
@@ -193,17 +193,6 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
             serviceType.IsInstanceOfType(this) ? this :
             _sessionClient is not null && serviceType.IsInstanceOfType(_sessionClient) ? _sessionClient :
             null;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) != 0)
-        {
-            return;
-        }
-
-        _sessionClient?.Dispose();
     }
 
     /// <inheritdoc />
@@ -220,7 +209,7 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
 
     #region Send Helpers (MEAI → SDK)
 
-    private async Task SendResponseCreateAsync(RealtimeClientResponseCreateMessage responseCreate, CancellationToken cancellationToken)
+    private async Task SendResponseCreateAsync(RealtimeClientCreateResponseMessage responseCreate, CancellationToken cancellationToken)
     {
         var responseOptions = new Sdk.RealtimeResponseOptions();
 
@@ -240,9 +229,12 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
         }
 
         // Conversation mode.
-        responseOptions.DefaultConversationConfiguration = responseCreate.ExcludeFromConversation
-            ? Sdk.RealtimeResponseDefaultConversationConfiguration.None
-            : Sdk.RealtimeResponseDefaultConversationConfiguration.Auto;
+        if (responseCreate.ExcludeFromConversation is bool excludeFromConversation)
+        {
+            responseOptions.DefaultConversationConfiguration = excludeFromConversation
+                ? Sdk.RealtimeResponseDefaultConversationConfiguration.None
+                : Sdk.RealtimeResponseDefaultConversationConfiguration.Auto;
+        }
 
         // Input items.
         if (responseCreate.Items is { } items)
@@ -316,7 +308,7 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
         }
     }
 
-    private async Task SendConversationItemCreateAsync(RealtimeClientConversationItemCreateMessage itemCreate, CancellationToken cancellationToken)
+    private async Task SendConversationItemCreateAsync(RealtimeClientCreateConversationItemMessage itemCreate, CancellationToken cancellationToken)
     {
         if (itemCreate.Item is null)
         {
@@ -1043,7 +1035,6 @@ public sealed class OpenAIRealtimeSession : IRealtimeSession
         }
 
         msg.ResponseId = response.Id;
-        msg.ConversationId = response.ConversationId;
         msg.Status = response.Status?.ToString();
 
         if (response.AudioOptions?.OutputAudioOptions is { } audioOut)

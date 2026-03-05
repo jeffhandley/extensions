@@ -24,10 +24,10 @@ public class FunctionInvokingRealtimeSessionTests
     }
 
     [Fact]
-    public void Properties_DefaultValues()
+    public async Task Properties_DefaultValues()
     {
-        using var inner = new TestRealtimeSession();
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var inner = new TestRealtimeSession();
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         Assert.False(session.IncludeDetailedErrors);
         Assert.False(session.AllowConcurrentInvocation);
@@ -39,20 +39,20 @@ public class FunctionInvokingRealtimeSessionTests
     }
 
     [Fact]
-    public void MaximumIterationsPerRequest_InvalidValue_Throws()
+    public async Task MaximumIterationsPerRequest_InvalidValue_Throws()
     {
-        using var inner = new TestRealtimeSession();
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var inner = new TestRealtimeSession();
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         Assert.Throws<ArgumentOutOfRangeException>("value", () => session.MaximumIterationsPerRequest = 0);
         Assert.Throws<ArgumentOutOfRangeException>("value", () => session.MaximumIterationsPerRequest = -1);
     }
 
     [Fact]
-    public void MaximumConsecutiveErrorsPerRequest_InvalidValue_Throws()
+    public async Task MaximumConsecutiveErrorsPerRequest_InvalidValue_Throws()
     {
-        using var inner = new TestRealtimeSession();
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var inner = new TestRealtimeSession();
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         Assert.Throws<ArgumentOutOfRangeException>("value", () => session.MaximumConsecutiveErrorsPerRequest = -1);
 
@@ -70,11 +70,11 @@ public class FunctionInvokingRealtimeSessionTests
             new() { Type = RealtimeServerMessageType.ResponseDone, MessageId = "evt_002" },
         };
 
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(serverMessages, ct),
         };
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         var received = new List<RealtimeServerMessage>();
         await foreach (var msg in session.GetStreamingResponseAsync())
@@ -96,21 +96,21 @@ public class FunctionInvokingRealtimeSessionTests
             "Gets the weather");
 
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [getWeather] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_001", "get_weather", new Dictionary<string, object?> { ["city"] = "Seattle" }),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         var received = new List<RealtimeServerMessage>();
         await foreach (var msg in session.GetStreamingResponseAsync())
@@ -125,14 +125,14 @@ public class FunctionInvokingRealtimeSessionTests
         Assert.Equal(2, injectedMessages.Count);
 
         // First injected: conversation.item.create with function result
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         Assert.NotNull(resultMsg.Item);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.Equal("call_001", functionResult.CallId);
         Assert.Contains("Sunny in Seattle", functionResult.Result?.ToString());
 
         // Second injected: response.create (no hardcoded modalities)
-        var responseCreate = Assert.IsType<RealtimeClientResponseCreateMessage>(injectedMessages[1]);
+        var responseCreate = Assert.IsType<RealtimeClientCreateResponseMessage>(injectedMessages[1]);
         Assert.Null(responseCreate.OutputModalities);
     }
 
@@ -145,20 +145,20 @@ public class FunctionInvokingRealtimeSessionTests
             "Gets weather");
 
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_002", "get_weather", new Dictionary<string, object?> { ["city"] = "London" }),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             AdditionalTools = [getWeather],
         };
@@ -169,7 +169,7 @@ public class FunctionInvokingRealtimeSessionTests
         }
 
         Assert.Equal(2, injectedMessages.Count);
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.Contains("Rainy in London", functionResult.Result?.ToString());
     }
@@ -190,14 +190,14 @@ public class FunctionInvokingRealtimeSessionTests
         var messages = Enumerable.Range(0, 5).Select<int, RealtimeServerMessage>(i =>
             CreateFunctionCallOutputItemMessage($"call_{i}", "counter", null)).ToList();
 
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [countFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(messages, ct),
-            SendClientMessageAsyncCallback = (_, _) => Task.CompletedTask,
+            SendAsyncCallback = (_, _) => Task.CompletedTask,
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             MaximumIterationsPerRequest = 2,
         };
@@ -224,17 +224,17 @@ public class FunctionInvokingRealtimeSessionTests
             "my_func",
             "Test");
 
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [myFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_custom", "my_func", null),
             ], ct),
-            SendClientMessageAsyncCallback = (_, _) => Task.CompletedTask,
+            SendAsyncCallback = (_, _) => Task.CompletedTask,
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             FunctionInvoker = (context, ct) =>
             {
@@ -255,20 +255,20 @@ public class FunctionInvokingRealtimeSessionTests
     public async Task GetStreamingResponseAsync_UnknownFunction_SendsErrorByDefault()
     {
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_unknown", "nonexistent_func", null),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         await foreach (var msg in session.GetStreamingResponseAsync())
         {
@@ -277,7 +277,7 @@ public class FunctionInvokingRealtimeSessionTests
 
         // Should inject error result + response.create
         Assert.Equal(2, injectedMessages.Count);
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.Contains("not found", functionResult.Result?.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -291,21 +291,21 @@ public class FunctionInvokingRealtimeSessionTests
             "Fails");
 
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [failFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_fail", "fail_func", null),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             IncludeDetailedErrors = true,
         };
@@ -316,7 +316,7 @@ public class FunctionInvokingRealtimeSessionTests
         }
 
         Assert.Equal(2, injectedMessages.Count);
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.Contains("Something broke", functionResult.Result?.ToString());
     }
@@ -330,21 +330,21 @@ public class FunctionInvokingRealtimeSessionTests
             "Fails");
 
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [failFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_fail2", "fail_func", null),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             IncludeDetailedErrors = false,
         };
@@ -354,20 +354,20 @@ public class FunctionInvokingRealtimeSessionTests
             // consume
         }
 
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.DoesNotContain("Secret error info", functionResult.Result?.ToString());
         Assert.Contains("failed", functionResult.Result?.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public void GetService_ReturnsSelf()
+    public async Task GetService_ReturnsSelf()
     {
-        using var inner = new TestRealtimeSession();
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var inner = new TestRealtimeSession();
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         Assert.Same(session, session.GetService(typeof(FunctionInvokingRealtimeSession)));
-        Assert.Same(session, session.GetService(typeof(IRealtimeSession)));
+        Assert.Same(session, session.GetService(typeof(IRealtimeClientSession)));
         Assert.Same(inner, session.GetService(typeof(TestRealtimeSession)));
     }
 
@@ -375,21 +375,21 @@ public class FunctionInvokingRealtimeSessionTests
     public async Task GetStreamingResponseAsync_TerminateOnUnknownCalls_StopsLoop()
     {
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_unknown", "nonexistent_func", null),
                 new RealtimeServerMessage { Type = RealtimeServerMessageType.ResponseDone, MessageId = "should_not_reach" },
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             TerminateOnUnknownCalls = true,
         };
@@ -411,20 +411,20 @@ public class FunctionInvokingRealtimeSessionTests
     public async Task GetStreamingResponseAsync_TerminateOnUnknownCalls_False_SendsError()
     {
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
             [
                 CreateFunctionCallOutputItemMessage("call_unknown", "nonexistent_func", null),
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             TerminateOnUnknownCalls = false,
         };
@@ -439,7 +439,7 @@ public class FunctionInvokingRealtimeSessionTests
 
         // Error result + response.create should be injected (default behavior)
         Assert.Equal(2, injectedMessages.Count);
-        var resultMsg = Assert.IsType<RealtimeClientConversationItemCreateMessage>(injectedMessages[0]);
+        var resultMsg = Assert.IsType<RealtimeClientCreateConversationItemMessage>(injectedMessages[0]);
         var functionResult = Assert.IsType<FunctionResultContent>(resultMsg.Item.Contents[0]);
         Assert.Contains("not found", functionResult.Result?.ToString(), StringComparison.OrdinalIgnoreCase);
     }
@@ -495,14 +495,14 @@ public class FunctionInvokingRealtimeSessionTests
             Item = combinedItem,
         };
 
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [slowFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages([combinedMessage], ct),
-            SendClientMessageAsyncCallback = (_, _) => Task.CompletedTask,
+            SendAsyncCallback = (_, _) => Task.CompletedTask,
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             AllowConcurrentInvocation = true,
         };
@@ -538,14 +538,14 @@ public class FunctionInvokingRealtimeSessionTests
             CreateFunctionCallOutputItemMessage("call_4", "fail_func", null),
         };
 
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [failFunc] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(messages, ct),
-            SendClientMessageAsyncCallback = (_, _) => Task.CompletedTask,
+            SendAsyncCallback = (_, _) => Task.CompletedTask,
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner)
+        await using var session = new FunctionInvokingRealtimeSession(inner)
         {
             MaximumConsecutiveErrorsPerRequest = 1,
         };
@@ -568,9 +568,9 @@ public class FunctionInvokingRealtimeSessionTests
     }
 
     [Fact]
-    public void UseFunctionInvocation_ConfigureCallback_IsInvoked()
+    public async Task UseFunctionInvocation_ConfigureCallback_IsInvoked()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(inner);
 
         bool configured = false;
@@ -581,7 +581,7 @@ public class FunctionInvokingRealtimeSessionTests
             session.MaximumIterationsPerRequest = 10;
         });
 
-        using var pipeline = builder.Build();
+        await using var pipeline = builder.Build();
         Assert.True(configured);
 
         var funcSession = pipeline.GetService(typeof(FunctionInvokingRealtimeSession));
@@ -600,7 +600,7 @@ public class FunctionInvokingRealtimeSessionTests
         var declaration = AIFunctionFactory.CreateDeclaration("my_declaration", "A non-invocable tool", schema);
 
         var injectedMessages = new List<RealtimeClientMessage>();
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             Options = new RealtimeSessionOptions { Tools = [declaration] },
             GetStreamingResponseAsyncCallback = (ct) => YieldMessages(
@@ -608,14 +608,14 @@ public class FunctionInvokingRealtimeSessionTests
                 CreateFunctionCallOutputItemMessage("call_decl", "my_declaration", null),
                 new RealtimeServerMessage { Type = RealtimeServerMessageType.ResponseDone, MessageId = "should_not_reach" },
             ], ct),
-            SendClientMessageAsyncCallback = (msg, _) =>
+            SendAsyncCallback = (msg, _) =>
             {
                 injectedMessages.Add(msg);
                 return Task.CompletedTask;
             },
         };
 
-        using var session = new FunctionInvokingRealtimeSession(inner);
+        await using var session = new FunctionInvokingRealtimeSession(inner);
 
         var received = new List<RealtimeServerMessage>();
         await foreach (var msg in session.GetStreamingResponseAsync())

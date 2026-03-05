@@ -13,71 +13,71 @@ namespace Microsoft.Extensions.AI;
 public class OpenAIRealtimeSessionTests
 {
     [Fact]
-    public void GetService_ReturnsExpectedServices()
+    public async Task GetService_ReturnsExpectedServices()
     {
-        using IRealtimeSession session = new OpenAIRealtimeSession("key", "model");
+        await using IRealtimeClientSession session = new OpenAIRealtimeSession("key", "model");
 
         Assert.Same(session, session.GetService(typeof(OpenAIRealtimeSession)));
-        Assert.Same(session, session.GetService(typeof(IRealtimeSession)));
+        Assert.Same(session, session.GetService(typeof(IRealtimeClientSession)));
         Assert.Null(session.GetService(typeof(string)));
         Assert.Null(session.GetService(typeof(OpenAIRealtimeSession), "someKey"));
     }
 
     [Fact]
-    public void GetService_NullServiceType_Throws()
+    public async Task GetService_NullServiceType_Throws()
     {
-        using IRealtimeSession session = new OpenAIRealtimeSession("key", "model");
+        await using IRealtimeClientSession session = new OpenAIRealtimeSession("key", "model");
         Assert.Throws<ArgumentNullException>("serviceType", () => session.GetService(null!));
     }
 
     [Fact]
-    public void Dispose_CanBeCalledMultipleTimes()
+    public async Task DisposeAsync_CanBeCalledMultipleTimes()
     {
-        IRealtimeSession session = new OpenAIRealtimeSession("key", "model");
-        session.Dispose();
+        IRealtimeClientSession session = new OpenAIRealtimeSession("key", "model");
+        await session.DisposeAsync();
 
         // Second dispose should not throw.
-        session.Dispose();
+        await session.DisposeAsync();
         Assert.Null(session.GetService(typeof(string)));
     }
 
     [Fact]
-    public void Options_InitiallyNull()
+    public async Task Options_InitiallyNull()
     {
-        using var session = new OpenAIRealtimeSession("key", "model");
+        await using var session = new OpenAIRealtimeSession("key", "model");
         Assert.Null(session.Options);
     }
 
     [Fact]
     public async Task UpdateAsync_NullOptions_Throws()
     {
-        using var session = new OpenAIRealtimeSession("key", "model");
+        await using var session = new OpenAIRealtimeSession("key", "model");
         await Assert.ThrowsAsync<ArgumentNullException>("options", () => session.UpdateAsync(null!));
     }
 
     [Fact]
-    public async Task SendClientMessageAsync_NullMessage_Throws()
+    public async Task SendAsync_NullMessage_Throws()
     {
-        using var session = new OpenAIRealtimeSession("key", "model");
-        await Assert.ThrowsAsync<ArgumentNullException>("message", () => session.SendClientMessageAsync(null!));
+        await using var session = new OpenAIRealtimeSession("key", "model");
+        await Assert.ThrowsAsync<ArgumentNullException>("message", () => session.SendAsync(null!));
     }
 
     [Fact]
-    public async Task SendClientMessageAsync_CancelledToken_ReturnsSilently()
+    public async Task SendAsync_CancelledToken_ReturnsSilently()
     {
-        using var session = new OpenAIRealtimeSession("key", "model");
+        await using var session = new OpenAIRealtimeSession("key", "model");
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         // Should not throw when cancellation is requested.
-        await session.SendClientMessageAsync(new RealtimeClientMessage(), cts.Token);
+        await session.SendAsync(new RealtimeClientMessage(), cts.Token);
         Assert.Null(session.Options);
     }
 
     [Fact]
     public async Task ConnectAsync_CancelledToken_Throws()
     {
-        using var session = new OpenAIRealtimeSession("key", "model");
+        await using var session = new OpenAIRealtimeSession("key", "model");
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 

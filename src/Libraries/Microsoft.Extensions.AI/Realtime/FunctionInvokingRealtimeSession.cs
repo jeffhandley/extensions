@@ -22,14 +22,14 @@ using FunctionInvocationStatus = Microsoft.Extensions.AI.FunctionInvokingChatCli
 namespace Microsoft.Extensions.AI;
 
 /// <summary>
-/// A delegating realtime session that invokes functions defined on <see cref="RealtimeClientResponseCreateMessage"/>.
+/// A delegating realtime session that invokes functions defined on <see cref="RealtimeClientCreateResponseMessage"/>.
 /// Include this in a realtime session pipeline to resolve function calls automatically.
 /// </summary>
 /// <remarks>
 /// <para>
 /// When this session receives a <see cref="FunctionCallContent"/> in a realtime server message from its inner
-/// <see cref="IRealtimeSession"/>, it responds by invoking the corresponding <see cref="AIFunction"/> defined
-/// in <see cref="RealtimeClientResponseCreateMessage.Tools"/> (or in <see cref="AdditionalTools"/>), producing a <see cref="FunctionResultContent"/>
+/// <see cref="IRealtimeClientSession"/>, it responds by invoking the corresponding <see cref="AIFunction"/> defined
+/// in <see cref="RealtimeClientCreateResponseMessage.Tools"/> (or in <see cref="AdditionalTools"/>), producing a <see cref="FunctionResultContent"/>
 /// that it sends back to the inner session. This loop is repeated until there are no more function calls to make, or until
 /// another stop condition is met, such as hitting <see cref="MaximumIterationsPerRequest"/>.
 /// </para>
@@ -41,7 +41,7 @@ namespace Microsoft.Extensions.AI;
 /// </para>
 /// <para>
 /// A <see cref="FunctionInvokingRealtimeSession"/> instance is thread-safe for concurrent use so long as the
-/// <see cref="AIFunction"/> instances employed as part of the supplied <see cref="RealtimeClientResponseCreateMessage"/> are also safe.
+/// <see cref="AIFunction"/> instances employed as part of the supplied <see cref="RealtimeClientCreateResponseMessage"/> are also safe.
 /// The <see cref="AllowConcurrentInvocation"/> property can be used to control whether multiple function invocation
 /// requests as part of the same request are invocable concurrently, but even with that set to <see langword="false"/>
 /// (the default), multiple concurrent requests to this same instance and using the same tools could result in those
@@ -67,10 +67,10 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
     /// <summary>
     /// Initializes a new instance of the <see cref="FunctionInvokingRealtimeSession"/> class.
     /// </summary>
-    /// <param name="innerSession">The underlying <see cref="IRealtimeSession"/>, or the next instance in a chain of sessions.</param>
+    /// <param name="innerSession">The underlying <see cref="IRealtimeClientSession"/>, or the next instance in a chain of sessions.</param>
     /// <param name="loggerFactory">An <see cref="ILoggerFactory"/> to use for logging information about function invocation.</param>
     /// <param name="functionInvocationServices">An optional <see cref="IServiceProvider"/> to use for resolving services required by the <see cref="AIFunction"/> instances being invoked.</param>
-    public FunctionInvokingRealtimeSession(IRealtimeSession innerSession, ILoggerFactory? loggerFactory = null, IServiceProvider? functionInvocationServices = null)
+    public FunctionInvokingRealtimeSession(IRealtimeClientSession innerSession, ILoggerFactory? loggerFactory = null, IServiceProvider? functionInvocationServices = null)
         : base(innerSession)
     {
         _logger = (ILogger?)loggerFactory?.CreateLogger<FunctionInvokingRealtimeSession>() ?? NullLogger.Instance;
@@ -98,11 +98,11 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
 
     /// <summary>
     /// Gets or sets a value indicating whether detailed exception information should be included
-    /// in the response when calling the underlying <see cref="IRealtimeSession"/>.
+    /// in the response when calling the underlying <see cref="IRealtimeClientSession"/>.
     /// </summary>
     /// <value>
     /// <see langword="true"/> if the full exception message is added to the response
-    /// when calling the underlying <see cref="IRealtimeSession"/>.
+    /// when calling the underlying <see cref="IRealtimeClientSession"/>.
     /// <see langword="false"/> if a generic error message is included in the response.
     /// The default value is <see langword="false"/>.
     /// </value>
@@ -114,7 +114,7 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
     /// the <see cref="FunctionResultContent.Exception"/> property.
     /// </para>
     /// <para>
-    /// Setting the value to <see langword="true"/> can help the underlying <see cref="IRealtimeSession"/> bypass problems on
+    /// Setting the value to <see langword="true"/> can help the underlying <see cref="IRealtimeClientSession"/> bypass problems on
     /// its own, for example by retrying the function call with different arguments. However it might
     /// result in disclosing the raw exception information to external users, which can be a security
     /// concern depending on the application scenario.
@@ -186,7 +186,7 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
     /// <para>
     /// When function invocations fail with an exception, the <see cref="FunctionInvokingRealtimeSession"/>
     /// continues to send responses to the inner session, optionally supplying exception information (as
-    /// controlled by <see cref="IncludeDetailedErrors"/>). This allows the <see cref="IRealtimeSession"/> to
+    /// controlled by <see cref="IncludeDetailedErrors"/>). This allows the <see cref="IRealtimeClientSession"/> to
     /// recover from errors by trying other function parameters that might succeed.
     /// </para>
     /// <para>
@@ -212,8 +212,8 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
     /// <summary>Gets or sets a collection of additional tools the session is able to invoke.</summary>
     /// <remarks>
     /// These will not impact the requests sent by the <see cref="FunctionInvokingRealtimeSession"/>, which will pass through the
-    /// <see cref="RealtimeClientResponseCreateMessage.Tools" /> unmodified. However, if the inner session requests the invocation of a tool
-    /// that was not in <see cref="RealtimeClientResponseCreateMessage.Tools" />, this <see cref="AdditionalTools"/> collection will also be consulted
+    /// <see cref="RealtimeClientCreateResponseMessage.Tools" /> unmodified. However, if the inner session requests the invocation of a tool
+    /// that was not in <see cref="RealtimeClientCreateResponseMessage.Tools" />, this <see cref="AdditionalTools"/> collection will also be consulted
     /// to look for a corresponding tool to invoke. This is useful when the service might have been preconfigured to be aware
     /// of certain tools that aren't also sent on each individual request.
     /// </remarks>
@@ -238,7 +238,7 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
     /// </para>
     /// <para>
     /// <see cref="AITool"/>s that the <see cref="FunctionInvokingRealtimeSession"/> is aware of (for example, because they're in
-    /// <see cref="RealtimeClientResponseCreateMessage.Tools"/> or <see cref="AdditionalTools"/>) but that aren't <see cref="AIFunction"/>s aren't considered
+    /// <see cref="RealtimeClientCreateResponseMessage.Tools"/> or <see cref="AdditionalTools"/>) but that aren't <see cref="AIFunction"/>s aren't considered
     /// unknown, just not invocable. Any requests to a non-invocable tool will also result in the function calling loop terminating,
     /// regardless of <see cref="TerminateOnUnknownCalls"/>.
     /// </para>
@@ -305,7 +305,7 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
                 foreach (var resultMessage in results.functionResults)
                 {
                     // inject back the function result messages to the inner session
-                    await InnerSession.SendClientMessageAsync(resultMessage, cancellationToken).ConfigureAwait(false);
+                    await InnerSession.SendAsync(resultMessage, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -458,14 +458,14 @@ public class FunctionInvokingRealtimeSession : DelegatingRealtimeSession
             var contentItem = new RealtimeContentItem([functionResultContent]);
 
             // Create the conversation item create message
-            var message = new RealtimeClientConversationItemCreateMessage(contentItem);
+            var message = new RealtimeClientCreateConversationItemMessage(contentItem);
             messages.Add(message);
         }
 
         // Add a response create message so the model responds to the function results.
         // Do not hardcode output modalities; let the session defaults apply so audio sessions
         // continue to work correctly.
-        messages.Add(new RealtimeClientResponseCreateMessage());
+        messages.Add(new RealtimeClientCreateResponseMessage());
 
         return messages;
     }

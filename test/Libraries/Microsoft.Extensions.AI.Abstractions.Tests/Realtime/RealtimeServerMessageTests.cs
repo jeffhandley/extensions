@@ -50,7 +50,7 @@ public class RealtimeServerMessageTests
         var message = new RealtimeServerErrorMessage();
 
         Assert.Null(message.Error);
-        Assert.Null(message.ErrorMessageId);
+        Assert.Null(message.OriginatingMessageId);
     }
 
     [Fact]
@@ -60,12 +60,12 @@ public class RealtimeServerMessageTests
         var message = new RealtimeServerErrorMessage
         {
             Error = error,
-            ErrorMessageId = "evt_bad",
+            OriginatingMessageId = "evt_bad",
             MessageId = "evt_err_1",
         };
 
         Assert.Same(error, message.Error);
-        Assert.Equal("evt_bad", message.ErrorMessageId);
+        Assert.Equal("evt_bad", message.OriginatingMessageId);
         Assert.Equal("temperature", message.Error.Details);
         Assert.Equal("evt_err_1", message.MessageId);
         Assert.IsAssignableFrom<RealtimeServerMessage>(message);
@@ -174,7 +174,6 @@ public class RealtimeServerMessageTests
 
         Assert.Null(message.OutputAudioOptions);
         Assert.Null(message.OutputVoice);
-        Assert.Null(message.ConversationId);
         Assert.Null(message.ResponseId);
         Assert.Null(message.MaxOutputTokens);
         Assert.Null(message.AdditionalProperties);
@@ -202,7 +201,6 @@ public class RealtimeServerMessageTests
         {
             OutputAudioOptions = audioFormat,
             OutputVoice = "alloy",
-            ConversationId = "conv_1",
             ResponseId = "resp_1",
             MaxOutputTokens = 1000,
             AdditionalProperties = metadata,
@@ -215,7 +213,6 @@ public class RealtimeServerMessageTests
 
         Assert.Same(audioFormat, message.OutputAudioOptions);
         Assert.Equal("alloy", message.OutputVoice);
-        Assert.Equal("conv_1", message.ConversationId);
         Assert.Equal("resp_1", message.ResponseId);
         Assert.Equal(1000, message.MaxOutputTokens);
         Assert.Same(metadata, message.AdditionalProperties);

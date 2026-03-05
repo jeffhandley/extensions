@@ -12,30 +12,23 @@ using Microsoft.Shared.Diagnostics;
 namespace Microsoft.Extensions.AI;
 
 /// <summary>
-/// Provides an optional base class for an <see cref="IRealtimeSession"/> that passes through calls to another instance.
+/// Provides an optional base class for an <see cref="IRealtimeClientSession"/> that passes through calls to another instance.
 /// </summary>
 /// <remarks>
-/// This is recommended as a base type when building sessions that can be chained around an underlying <see cref="IRealtimeSession"/>.
+/// This is recommended as a base type when building sessions that can be chained around an underlying <see cref="IRealtimeClientSession"/>.
 /// The default implementation simply passes each call to the inner session instance.
 /// </remarks>
 [Experimental(DiagnosticIds.Experiments.AIRealTime, UrlFormat = DiagnosticIds.UrlFormat)]
-public class DelegatingRealtimeSession : IRealtimeSession
+public class DelegatingRealtimeSession : IRealtimeClientSession
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="DelegatingRealtimeSession"/> class.
     /// </summary>
     /// <param name="innerSession">The wrapped session instance.</param>
     /// <exception cref="ArgumentNullException"><paramref name="innerSession"/> is <see langword="null"/>.</exception>
-    protected DelegatingRealtimeSession(IRealtimeSession innerSession)
+    protected DelegatingRealtimeSession(IRealtimeClientSession innerSession)
     {
         InnerSession = Throw.IfNull(innerSession);
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 
     /// <inheritdoc />
@@ -51,25 +44,18 @@ public class DelegatingRealtimeSession : IRealtimeSession
     protected virtual async ValueTask DisposeAsyncCore()
 #pragma warning restore EA0014
     {
-        if (InnerSession is IAsyncDisposable asyncDisposable)
-        {
-            await asyncDisposable.DisposeAsync().ConfigureAwait(false);
-        }
-        else
-        {
-            InnerSession.Dispose();
-        }
+        await InnerSession.DisposeAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Gets the inner <see cref="IRealtimeSession" />.</summary>
-    protected IRealtimeSession InnerSession { get; }
+    /// <summary>Gets the inner <see cref="IRealtimeClientSession" />.</summary>
+    protected IRealtimeClientSession InnerSession { get; }
 
     /// <inheritdoc />
     public virtual RealtimeSessionOptions? Options => InnerSession.Options;
 
     /// <inheritdoc />
-    public virtual Task SendClientMessageAsync(RealtimeClientMessage message, CancellationToken cancellationToken = default) =>
-        InnerSession.SendClientMessageAsync(message, cancellationToken);
+    public virtual Task SendAsync(RealtimeClientMessage message, CancellationToken cancellationToken = default) =>
+        InnerSession.SendAsync(message, cancellationToken);
 
     /// <inheritdoc />
     public virtual Task UpdateAsync(RealtimeSessionOptions options, CancellationToken cancellationToken = default) =>
@@ -89,15 +75,5 @@ public class DelegatingRealtimeSession : IRealtimeSession
         return
             serviceKey is null && serviceType.IsInstanceOfType(this) ? this :
             InnerSession.GetService(serviceType, serviceKey);
-    }
-
-    /// <summary>Provides a mechanism for releasing unmanaged resources.</summary>
-    /// <param name="disposing"><see langword="true"/> if being called from <see cref="Dispose()"/>; otherwise, <see langword="false"/>.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            InnerSession.Dispose();
-        }
     }
 }

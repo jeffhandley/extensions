@@ -17,19 +17,19 @@ public class RealtimeSessionBuilderTests
     [Fact]
     public void Ctor_NullSession_Throws()
     {
-        Assert.Throws<ArgumentNullException>("innerSession", () => new RealtimeSessionBuilder((IRealtimeSession)null!));
+        Assert.Throws<ArgumentNullException>("innerSession", () => new RealtimeSessionBuilder((IRealtimeClientSession)null!));
     }
 
     [Fact]
     public void Ctor_NullFactory_Throws()
     {
-        Assert.Throws<ArgumentNullException>("innerSessionFactory", () => new RealtimeSessionBuilder((Func<IServiceProvider, IRealtimeSession>)null!));
+        Assert.Throws<ArgumentNullException>("innerSessionFactory", () => new RealtimeSessionBuilder((Func<IServiceProvider, IRealtimeClientSession>)null!));
     }
 
     [Fact]
-    public void Build_WithNoMiddleware_ReturnsInnerSession()
+    public async Task Build_WithNoMiddleware_ReturnsInnerSession()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(inner);
 
         var result = builder.Build();
@@ -37,9 +37,9 @@ public class RealtimeSessionBuilderTests
     }
 
     [Fact]
-    public void Build_WithFactory_UsesFactory()
+    public async Task Build_WithFactory_UsesFactory()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(_ => inner);
 
         var result = builder.Build();
@@ -47,37 +47,37 @@ public class RealtimeSessionBuilderTests
     }
 
     [Fact]
-    public void Use_NullSessionFactory_Throws()
+    public async Task Use_NullSessionFactory_Throws()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(inner);
 
-        Assert.Throws<ArgumentNullException>("sessionFactory", () => builder.Use((Func<IRealtimeSession, IRealtimeSession>)null!));
-        Assert.Throws<ArgumentNullException>("sessionFactory", () => builder.Use((Func<IRealtimeSession, IServiceProvider, IRealtimeSession>)null!));
+        Assert.Throws<ArgumentNullException>("sessionFactory", () => builder.Use((Func<IRealtimeClientSession, IRealtimeClientSession>)null!));
+        Assert.Throws<ArgumentNullException>("sessionFactory", () => builder.Use((Func<IRealtimeClientSession, IServiceProvider, IRealtimeClientSession>)null!));
     }
 
     [Fact]
-    public void Use_StreamingDelegate_NullFunc_Throws()
+    public async Task Use_StreamingDelegate_NullFunc_Throws()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(inner);
 
         Assert.Throws<ArgumentNullException>(
             "getStreamingResponseFunc",
-            () => builder.Use((Func<IRealtimeSession, CancellationToken, IAsyncEnumerable<RealtimeServerMessage>>)null!));
+            () => builder.Use((Func<IRealtimeClientSession, CancellationToken, IAsyncEnumerable<RealtimeServerMessage>>)null!));
     }
 
     [Fact]
-    public void Build_PipelineOrder_FirstAddedIsOutermost()
+    public async Task Build_PipelineOrder_FirstAddedIsOutermost()
     {
         var callOrder = new List<string>();
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
 
         var builder = new RealtimeSessionBuilder(inner);
         builder.Use(session => new OrderTrackingSession(session, "first", callOrder));
         builder.Use(session => new OrderTrackingSession(session, "second", callOrder));
 
-        using var pipeline = builder.Build();
+        await using var pipeline = builder.Build();
 
         // The outermost should be "first" (added first)
         var outermost = Assert.IsType<OrderTrackingSession>(pipeline);
@@ -90,10 +90,10 @@ public class RealtimeSessionBuilderTests
     }
 
     [Fact]
-    public void Build_WithServiceProvider_PassesToFactory()
+    public async Task Build_WithServiceProvider_PassesToFactory()
     {
         IServiceProvider? capturedServices = null;
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
 
         var builder = new RealtimeSessionBuilder(inner);
         builder.Use((session, services) =>
@@ -109,10 +109,10 @@ public class RealtimeSessionBuilderTests
     }
 
     [Fact]
-    public void Build_NullServiceProvider_UsesEmptyProvider()
+    public async Task Build_NullServiceProvider_UsesEmptyProvider()
     {
         IServiceProvider? capturedServices = null;
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
 
         var builder = new RealtimeSessionBuilder(inner);
         builder.Use((session, services) =>
@@ -127,9 +127,9 @@ public class RealtimeSessionBuilderTests
     }
 
     [Fact]
-    public void Use_ReturnsSameBuilder_ForChaining()
+    public async Task Use_ReturnsSameBuilder_ForChaining()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = new RealtimeSessionBuilder(inner);
 
         var returned = builder.Use(s => s);
@@ -140,7 +140,7 @@ public class RealtimeSessionBuilderTests
     public async Task Use_WithStreamingDelegate_InterceptsStreaming()
     {
         var intercepted = false;
-        using var inner = new TestRealtimeSession
+        await using var inner = new TestRealtimeSession
         {
             GetStreamingResponseAsyncCallback = (ct) => YieldSingle(new RealtimeServerMessage { MessageId = "inner" }, ct),
         };
@@ -152,7 +152,7 @@ public class RealtimeSessionBuilderTests
             return innerSession.GetStreamingResponseAsync(ct);
         });
 
-        using var pipeline = builder.Build();
+        await using var pipeline = builder.Build();
         await foreach (var msg in pipeline.GetStreamingResponseAsync())
         {
             Assert.Equal("inner", msg.MessageId);
@@ -164,13 +164,13 @@ public class RealtimeSessionBuilderTests
     [Fact]
     public void AsBuilder_NullSession_Throws()
     {
-        Assert.Throws<ArgumentNullException>("innerSession", () => ((IRealtimeSession)null!).AsBuilder());
+        Assert.Throws<ArgumentNullException>("innerSession", () => ((IRealtimeClientSession)null!).AsBuilder());
     }
 
     [Fact]
-    public void AsBuilder_ReturnsBuilder()
+    public async Task AsBuilder_ReturnsBuilder()
     {
-        using var inner = new TestRealtimeSession();
+        await using var inner = new TestRealtimeSession();
         var builder = inner.AsBuilder();
 
         Assert.NotNull(builder);
@@ -191,14 +191,14 @@ public class RealtimeSessionBuilderTests
         public string Name { get; }
         private readonly List<string> _callOrder;
 
-        public OrderTrackingSession(IRealtimeSession inner, string name, List<string> callOrder)
+        public OrderTrackingSession(IRealtimeClientSession inner, string name, List<string> callOrder)
             : base(inner)
         {
             Name = name;
             _callOrder = callOrder;
         }
 
-        public IRealtimeSession GetInner() => InnerSession;
+        public IRealtimeClientSession GetInner() => InnerSession;
 
         public override async IAsyncEnumerable<RealtimeServerMessage> GetStreamingResponseAsync(
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
