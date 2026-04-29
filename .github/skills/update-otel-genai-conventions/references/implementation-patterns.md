@@ -21,6 +21,13 @@ public const string NewAttributeName = "gen_ai.new.attribute";
 
 Location: Relevant OpenTelemetry* client file (e.g., `OpenTelemetryChatClient.cs`)
 
+Keep provider-agnostic and provider-specific instrumentation separated:
+
+- Generic `gen_ai.*` attributes belong in `src/Libraries/Microsoft.Extensions.AI/ChatCompletion/OpenTelemetryChatClient.cs` or the relevant generic OpenTelemetry* client.
+- Provider-specific attributes, such as `openai.*`, belong in the provider package (`src/Libraries/Microsoft.Extensions.AI.OpenAI/`) so `OpenTelemetryChatClient` remains provider-agnostic.
+- For OpenAI-specific mappings, add helper logic near the existing `openai.api.type` handling in `OpenAIClientExtensions.cs`, invoke it from the provider client that exposes the SDK value, and test it in `test/Libraries/Microsoft.Extensions.AI.OpenAI.Tests/`.
+- Use `SetTag` for provider-specific response attributes that can arrive on multiple streaming updates so repeated updates do not duplicate tags.
+
 ### Request attributes (set before the call)
 
 In the `CreateAndConfigureActivity` or equivalent method, add the attribute after the activity is created:

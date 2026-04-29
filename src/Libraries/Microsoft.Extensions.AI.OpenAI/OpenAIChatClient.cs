@@ -360,6 +360,8 @@ internal sealed partial class OpenAIChatClient : IChatClient
             createdAt ??= update.CreatedAt;
             modelId ??= update.Model;
 
+            OpenAIClientExtensions.AddOpenAIResponseAttributes(update.ServiceTier?.ToString(), update.SystemFingerprint);
+
             // Create the response content object.
             ChatResponseUpdate responseUpdate = new()
             {
@@ -571,6 +573,8 @@ internal sealed partial class OpenAIChatClient : IChatClient
             RawRepresentation = openAICompletion,
             ResponseId = openAICompletion.Id,
         };
+
+        OpenAIClientExtensions.AddOpenAIResponseAttributes(openAICompletion.ServiceTier?.ToString(), openAICompletion.SystemFingerprint);
 
         if (openAICompletion.Usage is ChatTokenUsage tokenUsage)
         {

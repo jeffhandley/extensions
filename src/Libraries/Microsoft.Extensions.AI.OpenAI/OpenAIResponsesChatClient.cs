@@ -120,6 +120,8 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
     internal static ChatResponse FromOpenAIResponse(ResponseResult responseResult, CreateResponseOptions? openAIOptions, string? conversationId)
     {
+        OpenAIClientExtensions.AddOpenAIResponseAttributes(responseResult.ServiceTier?.ToString(), systemFingerprint: null);
+
         // Convert and return the results.
         ChatResponse response = new()
         {
@@ -674,6 +676,8 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
         void UpdateConversationId(string? id, ResponseResult? response = null)
         {
+            OpenAIClientExtensions.AddOpenAIResponseAttributes(response?.ServiceTier?.ToString(), systemFingerprint: null);
+
             storedOutputDisabled |= IsStoredOutputDisabled(options, response);
             if (storedOutputDisabled)
             {

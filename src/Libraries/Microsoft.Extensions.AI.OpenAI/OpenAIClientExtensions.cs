@@ -334,6 +334,12 @@ public static class OpenAIClientExtensions
     /// <summary>The "openai.api.type" tag name per the OpenTelemetry semantic conventions for OpenAI.</summary>
     internal const string OpenAIApiTypeTag = "openai.api.type";
 
+    /// <summary>The "openai.response.service_tier" tag name per the OpenTelemetry semantic conventions for OpenAI.</summary>
+    internal const string OpenAIResponseServiceTierTag = "openai.response.service_tier";
+
+    /// <summary>The "openai.response.system_fingerprint" tag name per the OpenTelemetry semantic conventions for OpenAI.</summary>
+    internal const string OpenAIResponseSystemFingerprintTag = "openai.response.system_fingerprint";
+
     /// <summary>The "chat_completions" value for the "openai.api.type" tag.</summary>
     internal const string OpenAIApiTypeChatCompletions = "chat_completions";
 
@@ -353,10 +359,38 @@ public static class OpenAIClientExtensions
         if (activity is { IsAllDataRequested: true })
         {
             string name = activity.DisplayName;
+            // Accept "chat" and "chat <name>".
             if (name.StartsWith(ChatOperationName, StringComparison.Ordinal) &&
                 (name.Length == ChatOperationName.Length || name[ChatOperationName.Length] == ' '))
             {
                 _ = activity.AddTag(OpenAIApiTypeTag, apiType);
+            }
+        }
+    }
+
+    /// <summary>
+    /// If the current <see cref="Activity"/> represents a "chat" operation span,
+    /// adds OpenAI-specific response tags with the specified values.
+    /// </summary>
+    internal static void AddOpenAIResponseAttributes(string? serviceTier, string? systemFingerprint)
+    {
+        Activity? activity = Activity.Current;
+        if (activity is { IsAllDataRequested: true })
+        {
+            string name = activity.DisplayName;
+            // Accept "chat" and "chat <name>".
+            if (name.StartsWith(ChatOperationName, StringComparison.Ordinal) &&
+                (name.Length == ChatOperationName.Length || name[ChatOperationName.Length] == ' '))
+            {
+                if (!string.IsNullOrWhiteSpace(serviceTier))
+                {
+                    _ = activity.SetTag(OpenAIResponseServiceTierTag, serviceTier);
+                }
+
+                if (!string.IsNullOrWhiteSpace(systemFingerprint))
+                {
+                    _ = activity.SetTag(OpenAIResponseSystemFingerprintTag, systemFingerprint);
+                }
             }
         }
     }
