@@ -33,6 +33,16 @@ Taxonomy for classifying gen-ai changes from semantic-conventions releases. Use 
 | **New operation name** | New `gen_ai.operation.name` value | Add detection logic, tests |
 | **Schema change** | Change to JSON schema for serialized content (e.g. tool definitions) | Update serialization classes, `[JsonSerializable]` registration |
 
+## Indicator Mapping
+
+Use these indicators consistently in audit reports, implementation summaries, and PR descriptions:
+
+| Indicator | Category | Meaning |
+|---|---|---|
+| 🟢 | No action required | No compensating code change is needed; explain why. |
+| 🟡 | Minor action required | Small metadata, constant-only, stability, or version-reference update. |
+| 🔴 | Code change required | Runtime behavior, emission logic, metrics, events, serialization, or tests must change. |
+
 ## Impact Assessment Heuristic
 
 For each gen-ai change in a release:
@@ -60,3 +70,17 @@ When presenting the analysis, use this table format:
 | `retrieval` operation | [#5678](link) | N/A — No client | None | — |
 | Version reference | — | Version bump | Update doc comments | Low |
 ```
+
+## PR Description Table Format
+
+When preparing a PR description, adapt the audit table into a concise reviewer-facing table grouped or sorted by semantic-conventions version. Include every analyzed gen-ai change, not just changes that required code edits.
+
+```markdown
+| Version | Indicator | Semantic-conventions change | Classification | Compensating change / rationale |
+|---|:---:|---|---|---|
+| v1.XX | 🔴 | `gen_ai.new.attribute` added | New required attribute | Added constant, emission, and tests in `{files}`. |
+| v1.XX | 🟡 | Version reference update | Version bump | Updated OpenTelemetry* doc comments to v1.XX. |
+| v1.XX | 🟢 | Provider server span clarified | Server-side only | No client-side instrumentation change needed. |
+```
+
+The final column should either describe the compensating change made or explain why no code change was made, such as "already implemented", "no local source exists", "no client exists", "server-side only", or "documentation-only clarification".
