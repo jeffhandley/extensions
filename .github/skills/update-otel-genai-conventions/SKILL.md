@@ -41,6 +41,14 @@ The user provides one of:
 
 When PR numbers are given without a full URL, resolve them against the `open-telemetry/semantic-conventions` repository.
 
+### Existing dotnet/extensions PR Preflight
+
+For **Mode 1: Audit** and **Mode 5: Local Plan**, after resolving the requested release or upstream PR identifiers but before doing deeper release analysis or creating a plan, search open pull requests in `dotnet/extensions` to determine whether another PR already appears to cover the requested GenAI/OpenTelemetry semantic-conventions update.
+
+Search using the requested release version, release URL, or upstream semantic-conventions PR numbers, plus relevant terms such as `gen-ai`, `GenAI`, `semantic conventions`, `OpenTelemetry`, and `OTel`. If one or more likely matching PRs are open, report the PR number, title, author, URL, and the signal that matched. Then stop and state that the audit or plan is not proceeding because an open PR already appears to cover the update.
+
+Do not silently ignore search failures. If GitHub search/listing is unavailable, report the problem and ask the user whether to proceed without the preflight.
+
 ### Analyzing the Release / PRs
 
 1. **Fetch the release notes** or PR descriptions and identify all gen-ai changes
@@ -62,27 +70,28 @@ For Step 4, read these files to understand current state:
 
 Audit the current gen-ai semantic conventions implementation against the latest published conventions to identify gaps, inconsistencies, or missed updates. Produces a plan that can be implemented locally (Mode 6) or delegated to CCA (Mode 3).
 
-1. **Determine the current implemented version**: Read the version reference from `OpenTelemetryChatClient.cs` doc comment to identify which convention version the codebase claims to implement
-2. **Check for version drift**: Verify every file with a gen-ai semantic conventions version reference uses the same version. Use the search command from [references/file-inventory.md](references/file-inventory.md#version-references). If files reference different versions, flag that as a critical gap requiring investigation.
-3. **Fetch the latest convention spec**: Read the current gen-ai semantic conventions from the [published spec](https://opentelemetry.io/docs/specs/semconv/gen-ai/) and the latest release notes
-4. **Read all current source files** listed in [references/file-inventory.md](references/file-inventory.md) to understand what is actually implemented
-5. **Cross-reference**: For each attribute, metric, event, and operation name defined in the conventions:
+1. Complete the **Existing dotnet/extensions PR Preflight** above. If a matching open PR exists, report it and stop.
+2. **Determine the current implemented version**: Read the version reference from `OpenTelemetryChatClient.cs` doc comment to identify which convention version the codebase claims to implement
+3. **Check for version drift**: Verify every file with a gen-ai semantic conventions version reference uses the same version. Use the search command from [references/file-inventory.md](references/file-inventory.md#version-references). If files reference different versions, flag that as a critical gap requiring investigation.
+4. **Fetch the latest convention spec**: Read the current gen-ai semantic conventions from the [published spec](https://opentelemetry.io/docs/specs/semconv/gen-ai/) and the latest release notes
+5. **Read all current source files** listed in [references/file-inventory.md](references/file-inventory.md) to understand what is actually implemented
+6. **Cross-reference**: For each attribute, metric, event, and operation name defined in the conventions:
    - Is the constant defined in `OpenTelemetryConsts.cs`?
    - Is it emitted in the relevant OpenTelemetry* client(s)?
    - Are version references consistent across all files?
    - Are tests covering the attribute/metric?
-6. **Build an audit report** as a table:
+7. **Build an audit report** as a table:
 
    | Convention Item | Expected | Implemented | Gap |
    |----------------|----------|-------------|-----|
    | `gen_ai.request.attribute` | v1.XX | ✅ Yes / ❌ No / ⚠️ Partial | Description of gap |
 
-7. **Produce a remediation plan** covering all identified gaps — formatted as either:
+8. **Produce a remediation plan** covering all identified gaps — formatted as either:
    - A **local plan** (Mode 5 format) with SQL-tracked todos, or
    - A **CCA prompt** (Mode 3 format) suitable for delegation
    
    Ask the user which format they prefer, or produce both if requested.
-8. **Verify this skill is still accurate** (same as Mode 7, step 6): compare skill content against the current codebase and call out any discrepancies
+9. **Verify this skill is still accurate** (same as Mode 7, step 6): compare skill content against the current codebase and call out any discrepancies
 
 ---
 
@@ -146,13 +155,15 @@ When running inside Copilot Coding Agent (github.com) with a prompt that referen
 
 Generate a plan.md with SQL-tracked todos for local implementation.
 
-1. Complete the **Input Handling** analysis above
-2. Create `plan.md` with:
+1. Resolve the user's input to a semantic-conventions release or upstream PR identifiers
+2. Complete the **Existing dotnet/extensions PR Preflight** above. If a matching open PR exists, report it and stop without creating `plan.md` or SQL todos.
+3. Complete the **Analyzing the Release / PRs** analysis above
+4. Create `plan.md` with:
    - Problem statement linking to the upstream release
    - Changes audit table (from analysis)
    - Numbered todos for each required change
-3. Insert todos into the SQL `todos` table with descriptive IDs and detailed descriptions
-4. For each todo, include:
+5. Insert todos into the SQL `todos` table with descriptive IDs and detailed descriptions
+6. For each todo, include:
    - Which file(s) to modify
    - What constants/attributes/code to add
    - Which tests to update
