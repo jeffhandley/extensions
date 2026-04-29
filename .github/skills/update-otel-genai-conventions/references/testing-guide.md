@@ -68,7 +68,7 @@ Assert.Null(activity.GetTagItem(OpenTelemetryConsts.GenAI.Request.OptionalAttrib
 ### Asserting Boolean Attributes
 
 ```csharp
-Assert.Equal(true, activity.GetTagItem(OpenTelemetryConsts.GenAI.Request.BoolAttribute));
+Assert.True(activity.GetTagItem(OpenTelemetryConsts.GenAI.Request.BoolAttribute) is true);
 ```
 
 ### Asserting Numeric Attributes

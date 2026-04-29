@@ -25,7 +25,7 @@ namespace Microsoft.Extensions.AI;
 /// <summary>Represents a delegating realtime session that implements the OpenTelemetry Semantic Conventions for Generative AI systems.</summary>
 /// <remarks>
 /// <para>
-/// This class provides an implementation of the Semantic Conventions for Generative AI systems v1.40, defined at <see href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" />.
+/// This class provides an implementation of the Semantic Conventions for Generative AI systems v1.41, defined at <see href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" />.
 /// The specification is still experimental and subject to change; as such, the telemetry output by this session is also subject to change.
 /// </para>
 /// <para>
@@ -33,15 +33,18 @@ namespace Microsoft.Extensions.AI;
 /// <list type="bullet">
 ///   <item><c>gen_ai.operation.name</c> - Operation name ("chat")</item>
 ///   <item><c>gen_ai.request.model</c> - Model name from options</item>
+///   <item><c>gen_ai.request.stream</c> - Indicates streaming response requests</item>
 ///   <item><c>gen_ai.provider.name</c> - Provider name from metadata</item>
 ///   <item><c>gen_ai.response.id</c> - Response ID from ResponseDone messages</item>
 ///   <item><c>gen_ai.response.model</c> - Model ID from response</item>
+///   <item><c>gen_ai.response.time_to_first_chunk</c> - Time to first streaming response chunk</item>
 ///   <item><c>gen_ai.usage.input_tokens</c> - Input token count</item>
 ///   <item><c>gen_ai.usage.output_tokens</c> - Output token count</item>
+///   <item><c>gen_ai.usage.reasoning.output_tokens</c> - Reasoning output token count</item>
 ///   <item><c>gen_ai.request.max_tokens</c> - Max output tokens from options</item>
 ///   <item><c>gen_ai.system_instructions</c> - Instructions from options (sensitive data)</item>
 ///   <item><c>gen_ai.conversation.id</c> - Conversation ID from response</item>
-///   <item><c>gen_ai.tool.definitions</c> - Tool definitions (sensitive data)</item>
+///   <item><c>gen_ai.tool.definitions</c> - Tool definitions</item>
 ///   <item><c>gen_ai.input.messages</c> - Input tool/MCP messages (sensitive data)</item>
 ///   <item><c>gen_ai.output.messages</c> - Output tool/MCP messages (sensitive data)</item>
 ///   <item><c>server.address</c> / <c>server.port</c> - Server endpoint info</item>
@@ -57,7 +60,7 @@ namespace Microsoft.Extensions.AI;
 /// </list>
 /// </para>
 /// <para>
-/// Additionally, the following custom attributes are supported (not part of OpenTelemetry GenAI semantic conventions as of v1.40):
+/// Additionally, the following custom attributes are supported (not part of OpenTelemetry GenAI semantic conventions as of v1.41):
 /// <list type="bullet">
 ///   <item><c>gen_ai.request.tool_choice</c> - Tool choice mode ("none", "auto", "required") or specific tool name</item>
 ///   <item><c>gen_ai.realtime.voice</c> - Voice setting from options</item>
@@ -207,7 +210,9 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
         string? requestModelId = options?.Model ?? _defaultModelId;
 
         // Start timing from the beginning of the streaming operation
-        Stopwatch? stopwatch = _operationDurationHistogram.Enabled ? Stopwatch.StartNew() : null;
+        bool trackStreamingResponseTime = _activitySource.HasListeners();
+        Stopwatch? stopwatch = _operationDurationHistogram.Enabled || trackStreamingResponseTime ? Stopwatch.StartNew() : null;
+        double? timeToFirstChunk = null;
 
         // Determine if we should capture messages for telemetry
         bool captureMessages = EnableSensitiveData && _activitySource.HasListeners();
@@ -220,8 +225,8 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
         catch (Exception ex)
         {
             // Create an activity for the error case
-            using Activity? errorActivity = CreateAndConfigureActivity(options);
-            TraceStreamingResponse(errorActivity, requestModelId, response: null, ex, stopwatch);
+            using Activity? errorActivity = CreateAndConfigureActivity(options, streamingResponse: true);
+            TraceStreamingResponse(errorActivity, requestModelId, response: null, ex, stopwatch, timeToFirstChunk);
             throw;
         }
 
@@ -249,6 +254,11 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                     throw;
                 }
 
+                if (timeToFirstChunk is null && stopwatch is not null)
+                {
+                    timeToFirstChunk = stopwatch.Elapsed.TotalSeconds;
+                }
+
                 // Track output modalities
                 if (outputModalities is not null)
                 {
@@ -273,12 +283,12 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                 if (message is ResponseCreatedRealtimeServerMessage responseDoneMsg &&
                     responseDoneMsg.Type == RealtimeServerMessageType.ResponseDone)
                 {
-                    using Activity? responseActivity = CreateAndConfigureActivity(options);
+                    using Activity? responseActivity = CreateAndConfigureActivity(options, streamingResponse: true);
 
                     // Add output modalities and messages tags
                     AddOutputModalitiesTag(responseActivity, outputModalities);
                     AddOutputMessagesTag(responseActivity, outputMessages);
-                    TraceStreamingResponse(responseActivity, requestModelId, responseDoneMsg, error, stopwatch);
+                    TraceStreamingResponse(responseActivity, requestModelId, responseDoneMsg, error, stopwatch, timeToFirstChunk);
                 }
 
                 yield return message;
@@ -289,10 +299,10 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
             // Trace error if an exception was thrown during streaming
             if (error is not null)
             {
-                using Activity? errorActivity = CreateAndConfigureActivity(options);
+                using Activity? errorActivity = CreateAndConfigureActivity(options, streamingResponse: true);
                 AddOutputModalitiesTag(errorActivity, outputModalities);
                 AddOutputMessagesTag(errorActivity, outputMessages);
-                TraceStreamingResponse(errorActivity, requestModelId, response: null, error, stopwatch);
+                TraceStreamingResponse(errorActivity, requestModelId, response: null, error, stopwatch, timeToFirstChunk);
             }
 
             await responseEnumerator.DisposeAsync().ConfigureAwait(false);
@@ -683,7 +693,7 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
     }
 
     /// <summary>Creates an activity for a realtime session request, or returns <see langword="null"/> if not enabled.</summary>
-    private Activity? CreateAndConfigureActivity(RealtimeSessionOptions? options)
+    private Activity? CreateAndConfigureActivity(RealtimeSessionOptions? options, bool streamingResponse = false)
     {
         Activity? activity = null;
         if (_activitySource.HasListeners())
@@ -700,6 +710,11 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                     .AddTag(OpenTelemetryConsts.GenAI.Operation.Name, OpenTelemetryConsts.GenAI.ChatName)
                     .AddTag(OpenTelemetryConsts.GenAI.Request.Model, modelId)
                     .AddTag(OpenTelemetryConsts.GenAI.Provider.Name, _providerName);
+
+                if (streamingResponse)
+                {
+                    _ = activity.AddTag(OpenTelemetryConsts.GenAI.Request.Stream, true);
+                }
 
                 if (_serverAddress is not null)
                 {
@@ -738,21 +753,13 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                                 JsonSerializer.Serialize(new object[1] { new RealtimeOtelGenericPart { Content = options.Instructions } }, RealtimeOtelContext.Default.IListObject));
                         }
 
-                        if (options.Tools is { Count: > 0 })
-                        {
-                            _ = activity.AddTag(
-                                OpenTelemetryConsts.GenAI.Tool.Definitions,
-                                JsonSerializer.Serialize(options.Tools.Select(t => t switch
-                                {
-                                    _ when t.GetService<AIFunctionDeclaration>() is { } af => new RealtimeOtelFunction
-                                    {
-                                        Name = af.Name,
-                                        Description = af.Description,
-                                        Parameters = af.JsonSchema,
-                                    },
-                                    _ => new RealtimeOtelFunction { Type = t.Name },
-                                }), RealtimeOtelContext.Default.IEnumerableRealtimeOtelFunction));
-                        }
+                    }
+
+                    if (options.Tools is { Count: > 0 })
+                    {
+                        _ = activity.AddTag(
+                            OpenTelemetryConsts.GenAI.Tool.Definitions,
+                            JsonSerializer.Serialize(options.Tools.Select(CreateOtelToolDefinition), RealtimeOtelContext.Default.IEnumerableRealtimeOtelFunction));
                     }
                 }
             }
@@ -767,7 +774,8 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
         string? requestModelId,
         ResponseCreatedRealtimeServerMessage? response,
         Exception? error,
-        Stopwatch? stopwatch)
+        Stopwatch? stopwatch,
+        double? timeToFirstChunk = null)
     {
         if (_operationDurationHistogram.Enabled && stopwatch is not null)
         {
@@ -861,6 +869,11 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                 _ = activity.AddTag(OpenTelemetryConsts.GenAI.Response.Id, response.ResponseId);
             }
 
+            if (timeToFirstChunk is double timeToFirstChunkValue)
+            {
+                _ = activity.AddTag(OpenTelemetryConsts.GenAI.Response.TimeToFirstChunk, timeToFirstChunkValue);
+            }
+
             if (!string.IsNullOrWhiteSpace(response.Status))
             {
                 _ = activity.AddTag(OpenTelemetryConsts.GenAI.Response.FinishReasons, $"[\"{response.Status}\"]");
@@ -881,6 +894,11 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                 if (responseUsage.CachedInputTokenCount is long cachedInputTokens)
                 {
                     _ = activity.AddTag(OpenTelemetryConsts.GenAI.Usage.CacheReadInputTokens, (int)cachedInputTokens);
+                }
+
+                if (responseUsage.ReasoningTokenCount is long reasoningTokens)
+                {
+                    _ = activity.AddTag(OpenTelemetryConsts.GenAI.Usage.ReasoningOutputTokens, (int)reasoningTokens);
                 }
 
                 if (responseUsage.InputAudioTokenCount is long inputAudioTokens)
@@ -911,6 +929,25 @@ internal sealed partial class OpenTelemetryRealtimeClientSession : IRealtimeClie
                 _ = activity.SetStatus(ActivityStatusCode.Error, responseError.Message);
             }
         }
+    }
+
+    private RealtimeOtelFunction CreateOtelToolDefinition(AITool tool)
+    {
+        if (tool.GetService<AIFunctionDeclaration>() is { } function)
+        {
+            return new()
+            {
+                Name = function.Name,
+                Description = EnableSensitiveData ? function.Description : null,
+                Parameters = EnableSensitiveData ? function.JsonSchema : null,
+            };
+        }
+
+        return new()
+        {
+            Type = tool.Name,
+            Name = tool.Name,
+        };
     }
 
     private void AddMetricTags(ref TagList tags, string? requestModelId, string? responseModelId)

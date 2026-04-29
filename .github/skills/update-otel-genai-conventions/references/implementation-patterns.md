@@ -63,16 +63,17 @@ activity?.SetTag(OpenTelemetryConsts.GenAI.Request.Stream, true);
 
 Location: `OpenTelemetryChatClient.cs`, in the response tracing section
 
-Usage tokens follow a specific pattern where they're emitted both as span attributes and in metric tag lists:
+Usage tokens follow a specific pattern where they're emitted as span attributes from response tracing:
 
 ```csharp
 // In TraceResponse or equivalent:
 if (usage?.NewTokenCount is int newTokens and > 0)
 {
     activity?.SetTag(OpenTelemetryConsts.GenAI.Usage.NewTokens, newTokens);
-    tags.Add(new(OpenTelemetryConsts.GenAI.Usage.NewTokens, (long)newTokens));
 }
 ```
+
+Only update `gen_ai.client.token.usage` metric recording when the convention adds or changes a token metric type. Do not add usage span attributes as metric tags.
 
 ## Pattern 4: Adding a Metric
 
@@ -130,7 +131,7 @@ When bumping the convention version (e.g. v1.39 → v1.40), update the doc comme
 
 ```csharp
 // Before:
-/// Semantic Conventions for Generative AI systems v1.40,
+/// Semantic Conventions for Generative AI systems v1.39,
 // After:
 /// Semantic Conventions for Generative AI systems v1.40,
 ```
@@ -175,13 +176,13 @@ case NewContentType newContent:
 Any attribute that could contain user-generated content must be gated:
 
 ```csharp
-if (_enableSensitiveData)
+if (EnableSensitiveData)
 {
     activity?.SetTag(OpenTelemetryConsts.GenAI.SensitiveAttribute, sensitiveValue);
 }
 ```
 
-Check the `_enableSensitiveData` field (set from constructor options or environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`).
+Check the `EnableSensitiveData` property (set directly or from environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`).
 
 ## Pattern 9: Span Naming for Tool Execution
 

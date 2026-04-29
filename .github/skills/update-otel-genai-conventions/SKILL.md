@@ -192,7 +192,10 @@ Review changes to gen-ai conventions against past patterns and known gotchas.
    - Version reference completeness
    - Exception recording approach (ILogger vs Activity.AddEvent)
 5. Report findings with references to past PRs where similar feedback was given
-6. **Verify this skill is still accurate**: Read through this SKILL.md and all reference files, comparing against the current codebase. The codebase may have evolved since this skill was last updated — new features integrated, files moved, patterns changed. If any skill content has become inaccurate (e.g. file paths, code patterns, constant naming conventions, test infrastructure), call out each discrepancy and recommend specific updates to the skill files so the author can update them alongside the convention changes.
+6. **Verify this skill is still accurate without polluting it with release-specific details**: Read through this SKILL.md and all reference files, comparing against the current codebase. The codebase may have evolved since this skill was last updated — new features integrated, files moved, patterns changed. If any skill content has become inaccurate (e.g. file paths, code patterns, constant naming conventions, test infrastructure), call out each discrepancy and recommend specific updates to the skill files so the author can update them alongside the convention changes.
+   - Recommend skill updates only for durable, cross-release guidance: reusable workflow steps, validation commands, repository conventions, stable implementation patterns, recurring review gotchas, or changed file paths/test infrastructure.
+   - Do **not** add semantic-conventions release notes, per-version audit findings, one-off attribute mappings, or implementation details that apply only to the current release into the skill or reference files.
+   - Capture version-specific findings in the review report, PR description, or implementation summary instead. Update `historical-releases.md` only when explicitly asked to curate long-lived historical reference data.
 
 ---
 

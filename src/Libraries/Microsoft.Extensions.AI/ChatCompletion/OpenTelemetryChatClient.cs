@@ -26,7 +26,7 @@ namespace Microsoft.Extensions.AI;
 
 /// <summary>Represents a delegating chat client that implements the OpenTelemetry Semantic Conventions for Generative AI systems.</summary>
 /// <remarks>
-/// This class provides an implementation of the Semantic Conventions for Generative AI systems v1.40, defined at <see href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" />.
+/// This class provides an implementation of the Semantic Conventions for Generative AI systems v1.41, defined at <see href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" />.
 /// The specification is still experimental and subject to change; as such, the telemetry output by this client is also subject to change.
 /// </remarks>
 public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
@@ -184,9 +184,10 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
         _ = Throw.IfNull(messages);
         _jsonSerializerOptions.MakeReadOnly();
 
-        using Activity? activity = CreateAndConfigureActivity(options);
+        using Activity? activity = CreateAndConfigureActivity(options, streaming: true);
         bool trackChunkTimes = _timeToFirstChunkHistogram.Enabled || _timePerOutputChunkHistogram.Enabled;
-        Stopwatch? stopwatch = _operationDurationHistogram.Enabled || trackChunkTimes ? Stopwatch.StartNew() : null;
+        bool trackStreamingResponseTime = trackChunkTimes || activity is not null;
+        Stopwatch? stopwatch = _operationDurationHistogram.Enabled || trackStreamingResponseTime ? Stopwatch.StartNew() : null;
         string? requestModelId = options?.ModelId ?? _defaultModelId;
 
         AddInputMessagesTags(messages, options, activity);
@@ -207,6 +208,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
         TimeSpan lastChunkElapsed = default;
         bool isFirstChunk = true;
         bool responseModelSet = false;
+        double? timeToFirstChunk = null;
         TagList chunkMetricTags = default;
         if (trackChunkTimes)
         {
@@ -234,9 +236,9 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     throw;
                 }
 
-                if (trackChunkTimes)
+                if (trackStreamingResponseTime)
                 {
-                    Debug.Assert(stopwatch is not null, "stopwatch should have been initialized when trackChunkTimes is true");
+                    Debug.Assert(stopwatch is not null, "stopwatch should have been initialized when trackStreamingResponseTime is true");
                     TimeSpan currentElapsed = stopwatch!.Elapsed;
                     double delta = (currentElapsed - lastChunkElapsed).TotalSeconds;
 
@@ -249,6 +251,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     if (isFirstChunk)
                     {
                         isFirstChunk = false;
+                        timeToFirstChunk = delta;
                         if (_timeToFirstChunkHistogram.Enabled)
                         {
                             _timeToFirstChunkHistogram.Record(delta, chunkMetricTags);
@@ -272,7 +275,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
         }
         finally
         {
-            TraceResponse(activity, requestModelId, trackedUpdates.ToChatResponse(), error, stopwatch);
+            TraceResponse(activity, requestModelId, trackedUpdates.ToChatResponse(), error, stopwatch, timeToFirstChunk);
 
             await responseEnumerator.DisposeAsync();
         }
@@ -547,7 +550,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
     }
 
     /// <summary>Creates an activity for a chat request, or returns <see langword="null"/> if not enabled.</summary>
-    private Activity? CreateAndConfigureActivity(ChatOptions? options)
+    private Activity? CreateAndConfigureActivity(ChatOptions? options, bool streaming = false)
     {
         Activity? activity = null;
         if (_activitySource.HasListeners())
@@ -569,6 +572,11 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     .AddTag(OpenTelemetryConsts.GenAI.Operation.Name, OpenTelemetryConsts.GenAI.ChatName)
                     .AddTag(OpenTelemetryConsts.GenAI.Request.Model, modelId)
                     .AddTag(OpenTelemetryConsts.GenAI.Provider.Name, _providerName);
+
+                if (streaming)
+                {
+                    _ = activity.AddTag(OpenTelemetryConsts.GenAI.Request.Stream, true);
+                }
 
                 if (_serverAddress is not null)
                 {
@@ -641,16 +649,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     {
                         _ = activity.AddTag(
                             OpenTelemetryConsts.GenAI.Tool.Definitions,
-                            JsonSerializer.Serialize(options.Tools.Select(t => t switch
-                            {
-                                _ when t.GetService<AIFunctionDeclaration>() is { } af => new OtelFunction
-                                {
-                                    Name = af.Name,
-                                    Description = af.Description,
-                                    Parameters = af.JsonSchema,
-                                },
-                                _ => new OtelFunction { Type = t.Name },
-                            }), OtelContext.Default.IEnumerableOtelFunction));
+                            JsonSerializer.Serialize(options.Tools.Select(CreateOtelToolDefinition), OtelContext.Default.IEnumerableOtelFunction));
                     }
 
                     if (EnableSensitiveData)
@@ -678,7 +677,8 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
         string? requestModelId,
         ChatResponse? response,
         Exception? error,
-        Stopwatch? stopwatch)
+        Stopwatch? stopwatch,
+        double? timeToFirstChunk = null)
     {
         if (_operationDurationHistogram.Enabled && stopwatch is not null)
         {
@@ -747,6 +747,11 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     _ = activity.AddTag(OpenTelemetryConsts.GenAI.Response.Model, response.ModelId);
                 }
 
+                if (timeToFirstChunk is double timeToFirstChunkValue)
+                {
+                    _ = activity.AddTag(OpenTelemetryConsts.GenAI.Response.TimeToFirstChunk, timeToFirstChunkValue);
+                }
+
                 if (response.Usage?.InputTokenCount is long inputTokens)
                 {
                     _ = activity.AddTag(OpenTelemetryConsts.GenAI.Usage.InputTokens, (int)inputTokens);
@@ -760,6 +765,11 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                 if (response.Usage?.CachedInputTokenCount is long cachedInputTokens)
                 {
                     _ = activity.AddTag(OpenTelemetryConsts.GenAI.Usage.CacheReadInputTokens, (int)cachedInputTokens);
+                }
+
+                if (response.Usage?.ReasoningTokenCount is long reasoningTokens)
+                {
+                    _ = activity.AddTag(OpenTelemetryConsts.GenAI.Usage.ReasoningOutputTokens, (int)reasoningTokens);
                 }
 
                 // Log all additional response properties as raw values on the span.
@@ -813,6 +823,25 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                 OpenTelemetryConsts.GenAI.Input.Messages,
                 SerializeChatMessages(messages, customContentSerializerOptions: _jsonSerializerOptions));
         }
+    }
+
+    private OtelFunction CreateOtelToolDefinition(AITool tool)
+    {
+        if (tool.GetService<AIFunctionDeclaration>() is { } function)
+        {
+            return new()
+            {
+                Name = function.Name,
+                Description = EnableSensitiveData ? function.Description : null,
+                Parameters = EnableSensitiveData ? function.JsonSchema : null,
+            };
+        }
+
+        return new()
+        {
+            Type = tool.Name,
+            Name = tool.Name,
+        };
     }
 
     private void AddOutputMessagesTags(ChatResponse response, Activity? activity)
