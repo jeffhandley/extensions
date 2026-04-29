@@ -186,8 +186,7 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
 
         using Activity? activity = CreateAndConfigureActivity(options, streaming: true);
         bool trackChunkTimes = _timeToFirstChunkHistogram.Enabled || _timePerOutputChunkHistogram.Enabled;
-        bool trackStreamingResponseTime = trackChunkTimes || activity is not null;
-        Stopwatch? stopwatch = _operationDurationHistogram.Enabled || trackStreamingResponseTime ? Stopwatch.StartNew() : null;
+        Stopwatch? stopwatch = _operationDurationHistogram.Enabled || trackChunkTimes || activity is not null ? Stopwatch.StartNew() : null;
         string? requestModelId = options?.ModelId ?? _defaultModelId;
 
         AddInputMessagesTags(messages, options, activity);
@@ -236,9 +235,9 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     throw;
                 }
 
-                if (trackStreamingResponseTime)
+                if (trackChunkTimes)
                 {
-                    Debug.Assert(stopwatch is not null, "stopwatch should have been initialized when trackStreamingResponseTime is true");
+                    Debug.Assert(stopwatch is not null, "stopwatch should have been initialized when trackChunkTimes is true");
                     TimeSpan currentElapsed = stopwatch!.Elapsed;
                     double delta = (currentElapsed - lastChunkElapsed).TotalSeconds;
 
@@ -263,6 +262,11 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                     }
 
                     lastChunkElapsed = currentElapsed;
+                }
+                else if (activity is not null && timeToFirstChunk is null)
+                {
+                    Debug.Assert(stopwatch is not null, "stopwatch should have been initialized when activity is not null");
+                    timeToFirstChunk = stopwatch!.Elapsed.TotalSeconds;
                 }
 
                 trackedUpdates.Add(update);
