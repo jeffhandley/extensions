@@ -144,21 +144,4 @@ When an attribute appears on both spans and metrics, ensure tests verify both em
 
 ## Build and Test Commands
 
-```bash
-# Remove any stale solution files first
-Remove-Item SDK.sln* -Force -ErrorAction SilentlyContinue
-
-# Baseline restore and build (required before generating filtered solution)
-.\build.cmd
-
-# Generate filtered solution for AI projects (-nolaunch prevents VS from opening)
-.\build.cmd -vs AI -nolaunch
-
-# Build and run tests
-.\build.cmd -build -test
-
-# Run specific test class (faster iteration)
-dotnet test test/Libraries/Microsoft.Extensions.AI.Tests/ --filter "FullyQualifiedName~OpenTelemetryChatClientTests"
-```
-
-**IMPORTANT**: Full build and test takes 45-60+ minutes. For faster iteration during development, use the `dotnet test --filter` approach above to run specific test classes.
+See [build-commands.md](build-commands.md) for the canonical Windows and Linux/macOS forms, including the faster `dotnet test --filter` invocation for inner-loop iteration.

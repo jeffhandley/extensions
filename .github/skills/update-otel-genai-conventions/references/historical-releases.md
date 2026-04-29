@@ -40,13 +40,6 @@ These PRs implemented specific gen-ai convention features rather than being tied
 | [#7379](https://github.com/dotnet/extensions/pull/7379) | Exception event recording (gen_ai.client.operation.exception) | v1.40 |
 | [#7382](https://github.com/dotnet/extensions/pull/7382) | invoke_workflow operation name | v1.40 |
 
-## Authorship Pattern Evolution
-
-- **v1.29–v1.37**: Human-authored PRs by @stephentoub — terse PR descriptions, often just links
-- **v1.36 onwards**: Copilot Coding Agent (CCA) introduced — detailed prompts in PR body
-- **v1.39–v1.40**: Primarily CCA-authored with structured prompts or audit tables
-- **v1.40 feature PRs**: Gold-standard CCA prompts (#7379, #7382) with Background → Required Changes → Tests structure
-
 ## Typical Change Patterns by Release
 
 ### Version-only releases (v1.36, v1.39)

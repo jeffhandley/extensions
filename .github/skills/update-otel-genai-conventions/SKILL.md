@@ -14,7 +14,7 @@ tools: ['github/*', 'sql']
 
 # Update OTel Gen-AI Conventions
 
-Analyze OpenTelemetry [semantic-conventions](https://github.com/open-telemetry/semantic-conventions) releases or PRs with `area:gen-ai` changes and produce compensating change plans for `dotnet/extensions`. This skill supports multiple modes of operation, from auditing and planning through implementation and review.
+Analyze OpenTelemetry [semantic-conventions](https://github.com/open-telemetry/semantic-conventions) releases or PRs with `area:gen-ai` changes and produce compensating updates in `dotnet/extensions`.
 
 ## Mode Detection
 
@@ -26,11 +26,10 @@ Determine the operating mode from the user's request:
 | User asks to "update for vX.Y" or "apply vX.Y changes" in autopilot / one-shot | **Mode 2: Autopilot** |
 | User asks to "generate a prompt" or "delegate to Copilot" or "CCA prompt" | **Mode 3: CCA Prompt** |
 | Running inside Copilot Coding Agent with a prompt referencing this skill | **Mode 4: CCA Implementation** |
-| User is in `/plan` mode or asks to "plan" changes | **Mode 5: Local Plan** |
-| User asks to "implement", "apply", or "make the changes" after a plan exists | **Mode 6: Local Implementation** |
-| User asks to `/review` or "review" convention changes | **Mode 7: Review** |
+| User is in `/plan` mode, asks to "plan" changes, or asks to "implement" / "apply" changes | **Mode 5: Plan-then-Implement** |
+| User asks to `/review` or "review" convention changes | **Mode 6: Review** |
 
-If unclear, default to **Mode 5** (Local Plan) and offer Mode 3 as an alternative.
+If unclear, default to **Mode 5** (Plan-then-Implement) and offer Mode 3 as an alternative.
 
 ## Input Handling
 
@@ -43,7 +42,7 @@ When PR numbers are given without a full URL, resolve them against the `open-tel
 
 ### Existing dotnet/extensions PR Preflight
 
-For **Mode 1: Audit** and **Mode 5: Local Plan**, after resolving the requested release or upstream PR identifiers but before doing deeper release analysis or creating a plan, search open pull requests in `dotnet/extensions` to determine whether another PR already appears to cover the requested GenAI/OpenTelemetry semantic-conventions update.
+For **Mode 1: Audit** and **Mode 5: Plan-then-Implement**, after resolving the requested release or upstream PR identifiers but before doing deeper release analysis or creating a plan, search open pull requests in `dotnet/extensions` to determine whether another PR already appears to cover the requested GenAI/OpenTelemetry semantic-conventions update.
 
 Search using the requested release version, release URL, or upstream semantic-conventions PR numbers, plus relevant terms such as `gen-ai`, `GenAI`, `semantic conventions`, `OpenTelemetry`, and `OTel`. If one or more likely matching PRs are open, report the PR number, title, author, URL, and the signal that matched. Then stop and state that the audit or plan is not proceeding because an open PR already appears to cover the update.
 
@@ -57,46 +56,17 @@ Do not silently ignore search failures. If GitHub search/listing is unavailable,
 4. **Check current state** — read the current source files to determine what is already implemented vs. what needs new work
 5. **Build a changes audit table** showing each semantic convention change, its classification, and required action
 
-For Step 4, read these files to understand current state:
-- `src/Libraries/Microsoft.Extensions.AI/OpenTelemetryConsts.cs` — all attribute/metric constants
-- `src/Libraries/Microsoft.Extensions.AI/ChatCompletion/OpenTelemetryChatClient.cs` — the version reference in the doc comment and all attribute emission
-- `src/Libraries/Microsoft.Extensions.AI/Embeddings/OpenTelemetryEmbeddingGenerator.cs` — embedding telemetry
-- `src/Libraries/Microsoft.Extensions.AI/Common/FunctionInvocationProcessor.cs` — shared function invocation logic (execute_tool spans)
-- Any other OpenTelemetry* files listed in the file inventory
+For Step 4, read the source files listed in [references/file-inventory.md](references/file-inventory.md) (`OpenTelemetryConsts.cs`, `OpenTelemetryChatClient.cs`, `OpenTelemetryEmbeddingGenerator.cs`, `Common/FunctionInvocationProcessor.cs`, and any other OpenTelemetry* files).
 
 ### PR Title and Description Guidance
 
-When asked to create or update a PR after implementing semantic-conventions changes, use this title format:
-
-```text
-Update OpenTelemetry gen-ai conventions to v{version}
-```
-
-Use the target semantic-conventions release version for `{version}`. If the PR also includes catch-up work from earlier releases, keep the title focused on the target version and explain the catch-up work in the PR description.
-
-The PR description should include a changes table derived from the audit table and [references/change-classification.md](references/change-classification.md). Group or sort rows by semantic-conventions version and include every analyzed gen-ai change, not only the rows that produced code changes. Use the same red/yellow/green indicators as the classification guide:
-
-- 🟢 for no action required
-- 🟡 for minor action required
-- 🔴 for code change required
-
-Use this table shape:
-
-```markdown
-| Version | Indicator | Semantic-conventions change | Classification | Compensating change / rationale |
-|---|:---:|---|---|---|
-| v1.XX | 🔴 | `gen_ai.example.attribute` added | New required attribute | Added constant, emission, and tests in `{files}`. |
-| v1.XX | 🟡 | Convention version reference changed | Version bump | Updated OpenTelemetry* doc comments. |
-| v1.XX | 🟢 | Server-side-only span attribute added | Server-side only | No client-side instrumentation change needed. |
-```
-
-For each row, describe the compensating change made, or explain why no change was made (already implemented, no local source, no client exists, server-side only, documentation only, etc.). Keep release-specific findings in the PR description or implementation summary; do not add them to the skill references unless they are durable cross-release guidance.
+When creating or updating a PR after implementing semantic-conventions changes, follow [references/pr-description.md](references/pr-description.md) for the title format and the changes-table shape.
 
 ---
 
 ## Mode 1: Audit
 
-Audit the current gen-ai semantic conventions implementation against the latest published conventions to identify gaps, inconsistencies, or missed updates. Produces a plan that can be implemented locally (Mode 6) or delegated to CCA (Mode 3).
+Audit the current gen-ai semantic conventions implementation against the latest published conventions to identify gaps, inconsistencies, or missed updates. Produces a plan that can be implemented locally (Mode 5) or delegated to CCA (Mode 3).
 
 1. Complete the **Existing dotnet/extensions PR Preflight** above. If a matching open PR exists, report it and stop.
 2. **Determine the current implemented version**: Read the version reference from `OpenTelemetryChatClient.cs` doc comment to identify which convention version the codebase claims to implement
@@ -115,31 +85,30 @@ Audit the current gen-ai semantic conventions implementation against the latest 
    | `gen_ai.request.attribute` | v1.XX | ✅ Yes / ❌ No / ⚠️ Partial | Description of gap |
 
 8. **Produce a remediation plan** covering all identified gaps — formatted as either:
-   - A **local plan** (Mode 5 format) with SQL-tracked todos, or
+   - A **local plan** (Mode 5 format), or
    - A **CCA prompt** (Mode 3 format) suitable for delegation
    
    Ask the user which format they prefer, or produce both if requested.
-9. **Verify this skill is still accurate** (same as Mode 7, step 6): compare skill content against the current codebase and call out any discrepancies
+9. **Verify this skill is still accurate** (same as Mode 6, step 6): compare skill content against the current codebase and call out any discrepancies
+
+---
+
+## Implementation Procedure
+
+Modes 2, 4, and 5 share the same implementation flow. See [references/implementation-procedure.md](references/implementation-procedure.md).
 
 ---
 
 ## Mode 2: Autopilot
 
-One-shot mode that analyzes the release, builds an internal plan, and implements all changes in a single pass. Best suited for autopilot usage or when the user wants end-to-end execution without intermediate review.
+One-shot mode that analyzes the release and implements all changes in a single pass without intermediate review. Best for end-to-end execution when the user does not need a plan checkpoint.
 
 1. Complete the **Input Handling** analysis above
-2. Build an internal work plan (do not write plan.md — keep it in working memory):
+2. Build an internal work plan in working memory (do not write `plan.md`):
    - Changes audit table with classification for each gen-ai change
    - Ordered list of implementation steps
-3. Read [references/implementation-patterns.md](references/implementation-patterns.md) and [references/testing-guide.md](references/testing-guide.md)
-4. Implement all changes in order:
-   - Version reference updates across all matched files
-   - New constants in `OpenTelemetryConsts.cs`
-   - Attribute/metric emission in relevant OpenTelemetry* clients
-   - Test updates — augment existing tests, add new assertions
-5. Self-review against [references/review-checklist.md](references/review-checklist.md)
-6. Validate per the **Validation** section below
-7. Present a summary of all changes made with the audit table showing what was implemented
+3. Follow the **Implementation Procedure** above
+4. Present a summary of all changes with the audit table showing what was implemented
 
 ---
 
@@ -167,56 +136,30 @@ The generated prompt should reference this skill:
 When running inside Copilot Coding Agent (github.com) with a prompt that references this skill.
 
 1. Parse the prompt to identify the required changes
-2. Read [references/implementation-patterns.md](references/implementation-patterns.md) for code patterns
-3. Read [references/testing-guide.md](references/testing-guide.md) for test patterns
-4. Read [references/review-checklist.md](references/review-checklist.md) to anticipate review feedback
-5. Implement each change following the patterns:
-   - Add constants to `OpenTelemetryConsts.cs`
-   - Add attribute emission to the relevant OpenTelemetry* client classes
-   - Update version references in doc comments across all OpenTelemetry* classes
-   - Update or augment tests
-6. Validate per the **Validation** section below
+2. Follow the **Implementation Procedure** above
 
 ---
 
-## Mode 5: Generate Local Plan
+## Mode 5: Plan-then-Implement
 
-Generate a plan.md with SQL-tracked todos for local implementation.
+Generate a plan and (after user review/approval) implement it. Best when the user wants a checkpoint between analysis and execution. The runtime decides how to track work items (e.g., a task list, an in-memory queue, or a SQL `todos` table — whichever the agent already uses).
+
+**Phase A: Plan** —
 
 1. Resolve the user's input to a semantic-conventions release or upstream PR identifiers
-2. Complete the **Existing dotnet/extensions PR Preflight** above. If a matching open PR exists, report it and stop without creating `plan.md` or SQL todos.
+2. Complete the **Existing dotnet/extensions PR Preflight** above. If a matching open PR exists, report it and stop without creating a plan.
 3. Complete the **Analyzing the Release / PRs** analysis above
-4. Create `plan.md` with:
-   - Problem statement linking to the upstream release
-   - Changes audit table (from analysis)
-   - Numbered todos for each required change
-5. Insert todos into the SQL `todos` table with descriptive IDs and detailed descriptions
-6. For each todo, include:
-   - Which file(s) to modify
-   - What constants/attributes/code to add
-   - Which tests to update
-   - Reference to the relevant implementation pattern from [references/implementation-patterns.md](references/implementation-patterns.md)
+4. Create `plan.md` with a problem statement linking to the upstream release, a changes audit table, and a numbered list of work items. Each work item should call out the file(s) to modify, what code/constants/attributes to add, and which tests to update.
+5. Pause for user review/approval before proceeding to Phase B
+
+**Phase B: Implement** —
+
+6. Read the existing `plan.md`
+7. Follow the **Implementation Procedure** above for each work item
 
 ---
 
-## Mode 6: Local Implementation
-
-After a plan has been generated (Mode 5), implement the changes locally.
-
-1. Read the existing plan from `plan.md`
-2. Query `SELECT * FROM todos WHERE status = 'pending' ORDER BY id` to find work items
-3. For each todo:
-   - Update status to `in_progress`
-   - Read [references/implementation-patterns.md](references/implementation-patterns.md) for the relevant pattern
-   - Implement the change
-   - Update status to `done`
-4. After all todos are complete:
-   - Read [references/review-checklist.md](references/review-checklist.md) and self-review
-   - Validate per the **Validation** section below
-
----
-
-## Mode 7: Review
+## Mode 6: Review
 
 Review changes to gen-ai conventions against past patterns and known gotchas.
 
@@ -231,10 +174,7 @@ Review changes to gen-ai conventions against past patterns and known gotchas.
    - Version reference completeness
    - Exception recording approach (ILogger vs Activity.AddEvent)
 5. Report findings with references to past PRs where similar feedback was given
-6. **Verify this skill is still accurate without polluting it with release-specific details**: Read through this SKILL.md and all reference files, comparing against the current codebase. The codebase may have evolved since this skill was last updated — new features integrated, files moved, patterns changed. If any skill content has become inaccurate (e.g. file paths, code patterns, constant naming conventions, test infrastructure), call out each discrepancy and recommend specific updates to the skill files so the author can update them alongside the convention changes.
-   - Recommend skill updates only for durable, cross-release guidance: reusable workflow steps, validation commands, repository conventions, stable implementation patterns, recurring review gotchas, or changed file paths/test infrastructure.
-   - Do **not** add semantic-conventions release notes, per-version audit findings, one-off attribute mappings, or implementation details that apply only to the current release into the skill or reference files.
-   - Capture version-specific findings in the review report, PR description, or implementation summary instead. Update `historical-releases.md` only when explicitly asked to curate long-lived historical reference data.
+6. **Verify this skill is still accurate**: Compare SKILL.md and all reference files against the current codebase (the codebase may have evolved — files moved, patterns changed). Recommend updates only for durable, cross-release guidance: workflow steps, validation commands, repository conventions, stable implementation patterns, file paths, test infrastructure. Do **not** pollute skill files with release-specific findings (per-version audits, one-off attribute mappings, etc.) — capture those in the review report, PR description, or implementation summary instead. Update `historical-releases.md` only when explicitly asked.
 
 ---
 
@@ -254,11 +194,8 @@ Critical knowledge from past PR reviews that should inform all modes:
 
 ## Validation
 
-After implementing changes (Modes 2, 4, and 6):
+After implementing changes (Modes 2, 4, and 5):
 
-1. **Remove any existing `SDK.sln*` files** from the repo root — stale solution files cause build errors
-2. **Baseline restore and build**: Run `.\build.cmd` from the repo root to restore dependencies and confirm a clean baseline build
-3. **Generate filtered AI solution**: `.\build.cmd -vs AI -nolaunch` (the `-nolaunch` flag prevents Visual Studio from opening)
-4. **Build and test**: `.\build.cmd -build -test`
-5. Verify no new build warnings in `artifacts/log/Build.binlog`
-6. If public API surface changed, run `./scripts/MakeApiBaselines.ps1` — then **discard API baseline updates for unrelated libraries** (only keep baselines for libraries changed as part of the convention update)
+1. **Restore, build, and test** using the commands in [references/build-commands.md](references/build-commands.md) — pick the form (Windows or Linux/macOS) that matches your environment. Always remove any stale `SDK.sln*` files first; they cause build errors when present alongside a newly-generated filtered solution.
+2. Verify no new build warnings in `artifacts/log/Build.binlog`
+3. If the public API surface changed, regenerate the API baselines per [references/build-commands.md](references/build-commands.md) — then **discard baseline updates for unrelated libraries** (only keep baselines for libraries changed as part of the convention update)

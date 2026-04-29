@@ -88,10 +88,9 @@ Reference the `update-otel-genai-conventions` skill in `.github/skills/` for:
 ## Validation
 
 After implementing changes:
-1. Generate filtered solution: `.\build.cmd -vs AI -nolaunch`
-2. Build and test: `.\build.cmd -build -test`
-3. If public API surface changed, run `./scripts/MakeApiBaselines.ps1`
-4. Verify no remaining references to old version: `grep -rn "v{OLD_VERSION}" src/Libraries/Microsoft.Extensions.AI/`
+1. Restore, generate the AI-filtered solution, build, and run the tests using the Linux/macOS commands in `.github/skills/update-otel-genai-conventions/references/build-commands.md`
+2. If the public API surface changed, run `pwsh ./scripts/MakeApiBaselines.ps1` and keep only the baselines for the libraries actually changed
+3. Verify no remaining references to the old version: `grep -rn "v{OLD_VERSION}" src/Libraries/Microsoft.Extensions.AI/`
 ```
 
 ---
