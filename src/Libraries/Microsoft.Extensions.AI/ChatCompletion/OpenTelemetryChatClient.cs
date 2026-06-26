@@ -353,6 +353,19 @@ public sealed partial class OpenTelemetryChatClient : DelegatingChatClient
                         _ = activity.AddTag(OpenTelemetryConsts.GenAI.Request.TopP, top_p);
                     }
 
+                    if (options.Reasoning?.Effort is ReasoningEffort effort && effort != ReasoningEffort.None)
+                    {
+                        string effortLevel = effort switch
+                        {
+                            ReasoningEffort.Low => "low",
+                            ReasoningEffort.Medium => "medium",
+                            ReasoningEffort.High => "high",
+                            ReasoningEffort.ExtraHigh => "xhigh",
+                            _ => effort.ToString().ToLowerInvariant(),
+                        };
+                        _ = activity.AddTag(OpenTelemetryConsts.GenAI.Request.ReasoningLevel, effortLevel);
+                    }
+
                     if (options.ResponseFormat is not null)
                     {
                         switch (options.ResponseFormat)
