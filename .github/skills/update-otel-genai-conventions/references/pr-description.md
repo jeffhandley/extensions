@@ -112,21 +112,21 @@ Applicability legend (symbol-only in the Applicability column):
 
 ### 4. Tracking state -- very bottom
 
-Place the machine-readable scan state at the **very bottom** of the body, after the applicability tables. The body **ends with this block** -- do not append a refresh procedure or any other section after it. The state lives in an HTML-comment-delimited block so the next run can parse it:
+Place the machine-readable scan state at the **very bottom** of the body, after the applicability tables. The body **ends with this block** -- do not append a refresh procedure or any other section after it. The state lives in a fenced YAML block delimited by `# otel-genai-tracking` comments so the next run can parse it:
 
 ````markdown
 ## Tracking state
 
-<!-- otel-genai-tracking:begin -->
 ```yaml
+# otel-genai-tracking:begin
 Upstream-Repo: open-telemetry/semantic-conventions-genai
 Upstream-Scan-Ref: <commit-sha>            # optional inline note on what changed since the prior ref
 Upstream-Scan-Date: <ISO-8601 UTC>
 Upstream-Release: none                      # Unreleased; Towncrier fragments under changelog.d/
 Core-Semconv-Dependency: vX.Y.Z             # versions.env SEMCONV_VERSION (core dep, NOT the GenAI version)
 DotnetExtensions-Implemented-Version: vX.Y  # doc-comment version reference currently in source
+# otel-genai-tracking:end
 ```
-<!-- otel-genai-tracking:end -->
 ````
 
 ## Refreshing the tracking PR
