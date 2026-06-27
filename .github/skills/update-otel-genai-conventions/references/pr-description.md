@@ -112,30 +112,19 @@ Applicability legend (symbol-only in the Applicability column):
 
 ### 4. Tracking state -- very bottom
 
-Place the machine-readable scan state at the **very bottom** of the body, after the applicability tables. The body **ends with this block** -- do not append a refresh procedure or any other section after it. The state lives in an HTML-comment-delimited block so the next run can parse it:
+Place the machine-readable scan state at the **very bottom** of the body, after the applicability tables. The body **ends with this block** -- do not append a refresh procedure or any other section after it. The state lives in a fenced `yaml` block whose first and last lines are `# otel-genai-tracking:begin` / `# otel-genai-tracking:end` sentinel comments so the next run can locate and parse it. Do **not** wrap it in HTML comments (`<!-- -->`) -- GitHub Actions safe-output processing strips HTML comments from PR/issue bodies, so the delimiters must live inside the code fence as `yaml` comments:
 
 ````markdown
 ## Tracking state
 
-<!-- otel-genai-tracking:begin -->
 ```yaml
+# otel-genai-tracking:begin
 Upstream-Repo: open-telemetry/semantic-conventions-genai
 Upstream-Scan-Ref: <commit-sha>            # optional inline note on what changed since the prior ref
 Upstream-Scan-Date: <ISO-8601 UTC>
 Upstream-Release: none                      # Unreleased; Towncrier fragments under changelog.d/
 Core-Semconv-Dependency: vX.Y.Z             # versions.env SEMCONV_VERSION (core dep, NOT the GenAI version)
 DotnetExtensions-Implemented-Version: vX.Y  # doc-comment version reference currently in source
+# otel-genai-tracking:end
 ```
-<!-- otel-genai-tracking:end -->
 ````
-
-## Refreshing the tracking PR
-
-The PR body carries only the tracking state block; the refresh logic lives in **this skill**, not in the PR body. During the skill's **Existing dotnet/extensions PR Preflight**, treat the tracking PR as the **scan record** -- not a blocking duplicate -- and refresh it as follows:
-
-1. Invoke the skill in **Mode 1: Audit** -- the skill owns this PR's title and body.
-2. Read the `otel-genai-tracking` state block; take `Upstream-Scan-Ref` as the prior scan point.
-3. Per the skill's **Input Handling**, run `git log Upstream-Scan-Ref..main` on `open-telemetry/semantic-conventions-genai` and re-list the `changelog.d/` fragments and the open PRs.
-4. Classify each new or changed item with the [change-classification](change-classification.md) framework against the current `Microsoft.Extensions.AI` instrumentation, and update both applicability tables.
-5. Advance `Upstream-Scan-Ref` / `Upstream-Scan-Date` (and `Core-Semconv-Dependency` / `DotnetExtensions-Implemented-Version` if they moved) in the state block.
-6. If the GenAI repo cut a release, follow the skill's version-reference migration (Gotchas + [file-inventory.md §Version References](file-inventory.md#version-references)) to bump and migrate the doc-comment version in lockstep.
