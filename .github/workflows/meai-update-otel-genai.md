@@ -77,6 +77,14 @@ if: ${{ github.event_name == 'workflow_dispatch' || github.event.repository.fork
 on:
   schedule: daily
   workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: >-
+          Optional git ref (branch, tag, or commit SHA) in
+          open-telemetry/semantic-conventions-genai to scan instead of the
+          default-branch HEAD. Leave empty to scan the default-branch HEAD.
+        required: false
+        type: string
   permissions: {}
 
 # ###############################################################
@@ -138,9 +146,19 @@ governs **lifecycle/idempotency** (which PR to touch and what state to leave it 
 
 ## Step 1 -- Capture the upstream state
 
-1. Read the latest state of `open-telemetry/semantic-conventions-genai` on its
-   default branch:
-   - Current **HEAD commit SHA** (`Upstream-Scan-Ref`).
+**Which upstream ref to scan.** By default this run scans the **default-branch HEAD**
+of `open-telemetry/semantic-conventions-genai`. When dispatched with an
+`upstream_ref` input, scan that ref instead -- the value is
+`${{ github.event.inputs.upstream_ref }}`: if it is non-empty, treat it as a git ref
+(branch, tag, or commit SHA) in that repo and scan it instead of the default-branch
+HEAD; if it is empty (every scheduled run, and dispatches that leave it blank), scan
+the default-branch HEAD. Resolve whichever ref applies to a concrete commit SHA and
+record that SHA as `Upstream-Scan-Ref`; all downstream logic (the SHA comparison in
+Step 3, the tracking block) uses that resolved SHA.
+
+1. Read the state of `open-telemetry/semantic-conventions-genai` at the scanned ref
+   (the `upstream_ref` override when provided, otherwise its default branch):
+   - The scanned ref's **commit SHA** (`Upstream-Scan-Ref`).
    - Whether a tagged **release** exists/is published (`Upstream-Release`); record
      `none` while the conventions are still unreleased (Development stability). A
      value of `none` is the expected normal case and must **not** cause a no-op or
@@ -164,11 +182,11 @@ governs **lifecycle/idempotency** (which PR to touch and what state to leave it 
 
 Invoke the `update-otel-genai-conventions` skill in **Plan-then-Implement** mode.
 Base the analysis on the current state of `main` in this repository compared to the
-upstream HEAD captured in Step 1. Produce the changes audit table (with 🔴/🟡/🟢
+scanned upstream commit captured in Step 1. Produce the changes audit table (with 🔴/🟡/🟢
 classifications) and an ordered list of work items, exactly as the skill describes.
 
 Do the **full** convention cross-reference -- compare the gen-ai attributes,
-metrics, events, and operation names defined at the upstream HEAD against what the
+metrics, events, and operation names defined at the scanned upstream commit against what the
 code actually emits (the implemented version from the doc comments). Drive this from
 the conventions themselves, not from the upstream CHANGELOG: a `Development`-stability
 upstream commonly shows `Unreleased`/no tag while still carrying merged convention
@@ -185,7 +203,7 @@ classification, implementation patterns, testing guidance, and validation comman
 
 This workflow tracks **merged upstream gen-ai convention changes regardless of
 whether a release is published.** Each merged upstream change present at the
-upstream HEAD but not yet reflected in the implemented version (e.g. every
+scanned upstream commit but not yet reflected in the implemented version (e.g. every
 `changelog.d/*.md` fragment) is a tracked change. Treat the set of such changes
 ahead of the implemented version as the work to integrate.
 
@@ -219,7 +237,7 @@ tracking block to read its recorded `Upstream-Scan-Ref`, and note the PR's **sta
 (open draft / open non-draft / merged / closed-without-merge) and its actual head
 branch.
 
-Compare the PR's recorded `Upstream-Scan-Ref` to the upstream HEAD SHA from Step 1
+Compare the PR's recorded `Upstream-Scan-Ref` to the scanned upstream SHA from Step 1
 and pick the action using **both** the PR's state and the SHA comparison. A
 **closed-without-merge** PR is never a no-op -- it always means start fresh, caught
 up or not: a closed PR was abandoned or superseded, so its recorded SHA being current
@@ -357,7 +375,7 @@ upstream-scan applicability tables, and the machine-readable
 `# otel-genai-tracking:begin` yaml block (under `## Tracking state`) that **ends** the body. Do not
 hand-author or restate that template here; fill it with this run's values.
 
-Supply the skill the scan values captured in Step 1 (upstream HEAD SHA, scan
+Supply the skill the scan values captured in Step 1 (scanned upstream SHA, scan
 timestamp, release-or-`none`, core-semconv dependency, implemented version) so the
 state block records them -- that block is exactly what Step 3 reads back on the next
 run. On an incremental update, advance `Upstream-Scan-Ref` /
@@ -394,7 +412,7 @@ release** and a matching open PR exists:
   `noop` safe output, and **also** write a short explanation to the GitHub Actions
   **step summary** (see below). Do not create any repository-visible artifact.
 - A no-op is valid in only two cases: (a) an **open or merged** matching PR's recorded
-  `Upstream-Scan-Ref` equals the upstream HEAD SHA, or (b) the completed Step 2
+  `Upstream-Scan-Ref` equals the scanned upstream SHA, or (b) the completed Step 2
   cross-reference finds zero merged upstream gen-ai convention changes ahead of the
   implemented version. A **closed-without-merge** PR is **never** a no-op even when its
   recorded SHA is current -- it did not ship, so Step 3 starts a fresh PR. Case (b)
@@ -409,6 +427,6 @@ release** and a matching open PR exists:
   explanation to the file at `$GITHUB_STEP_SUMMARY` (for example
   `echo "..." >> "$GITHUB_STEP_SUMMARY"`). This summary is attached to the workflow
   run only -- it is **not** a repository-visible report. Include: the target
-  `{target}`, the upstream HEAD SHA, the scan timestamp, which of the two no-op
+  `{target}`, the scanned upstream SHA, the scan timestamp, which of the two no-op
   conditions was met, and -- when condition (a) applies -- the matched PR number/URL
   and its state (open draft / open / merged).
