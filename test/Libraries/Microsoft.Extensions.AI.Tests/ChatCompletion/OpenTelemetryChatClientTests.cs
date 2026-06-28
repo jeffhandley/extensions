@@ -127,6 +127,7 @@ public class OpenTelemetryChatClientTests
             TopP = 4.0f,
             TopK = 7,
             PresencePenalty = 5.0f,
+            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.Low },
             ResponseFormat = ChatResponseFormat.Json,
             Temperature = 6.0f,
             Seed = 42,
@@ -179,6 +180,7 @@ public class OpenTelemetryChatClientTests
         Assert.Equal(6.0f, activity.GetTagItem("gen_ai.request.temperature"));
         Assert.Equal(7, activity.GetTagItem("gen_ai.request.top_k"));
         Assert.Equal(123, activity.GetTagItem("gen_ai.request.max_tokens"));
+        Assert.Equal("low", activity.GetTagItem("gen_ai.request.reasoning.level"));
         Assert.Equal("""["hello", "world"]""", activity.GetTagItem("gen_ai.request.stop_sequences"));
         Assert.Equal(enableSensitiveData ? "value1" : null, activity.GetTagItem("service_tier"));
         Assert.Equal(enableSensitiveData ? "value2" : null, activity.GetTagItem("SomethingElse"));
