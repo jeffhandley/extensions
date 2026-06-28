@@ -131,6 +131,7 @@ public class OpenTelemetryChatClientTests
             Temperature = 6.0f,
             Seed = 42,
             StopSequences = ["hello", "world"],
+            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High },
             AdditionalProperties = new()
             {
                 ["service_tier"] = "value1",
@@ -183,6 +184,7 @@ public class OpenTelemetryChatClientTests
         Assert.Equal(enableSensitiveData ? "value1" : null, activity.GetTagItem("service_tier"));
         Assert.Equal(enableSensitiveData ? "value2" : null, activity.GetTagItem("SomethingElse"));
         Assert.Equal(42L, activity.GetTagItem("gen_ai.request.seed"));
+        Assert.Equal("high", activity.GetTagItem("gen_ai.request.reasoning.level"));
 
         Assert.Equal("id123", activity.GetTagItem("gen_ai.response.id"));
         Assert.Equal("""["stop"]""", activity.GetTagItem("gen_ai.response.finish_reasons"));
