@@ -255,7 +255,7 @@ internal static class OtelMessageSerializer
         return JsonSerializer.Serialize(output, DefaultOptions.GetTypeInfo(typeof(IList<object>)));
     }
 
-    /// <summary>Derives the OTel <c>modality</c> classifier from a media type's top-level type.</summary>
+    /// <summary>Derives the OTel <c>modality</c> classifier from a media type.</summary>
     internal static string? DeriveModalityFromMediaType(string? mediaType)
     {
         if (mediaType is not null)
@@ -264,11 +264,35 @@ internal static class OtelMessageSerializer
             if (pos >= 0)
             {
                 ReadOnlySpan<char> topLevel = mediaType.AsSpan(0, pos);
-                return
-                    topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
-                    topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
-                    topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
-                    null;
+                if (topLevel.Equals("image", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "image";
+                }
+
+                if (topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "audio";
+                }
+
+                if (topLevel.Equals("video", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "video";
+                }
+
+                // Document types: PDF and common Office document formats
+                if (topLevel.Equals("application", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadOnlySpan<char> subType = mediaType.AsSpan(pos + 1);
+                    if (subType.Equals("pdf", StringComparison.OrdinalIgnoreCase) ||
+                        subType.StartsWith("msword", StringComparison.OrdinalIgnoreCase) ||
+                        subType.StartsWith(
+                            "vnd.openxmlformats-officedocument.",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        subType.StartsWith("vnd.ms-", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return "document";
+                    }
+                }
             }
         }
 
