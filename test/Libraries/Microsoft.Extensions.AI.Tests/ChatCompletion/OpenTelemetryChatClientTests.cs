@@ -131,7 +131,7 @@ public class OpenTelemetryChatClientTests
             Temperature = 6.0f,
             Seed = 42,
             StopSequences = ["hello", "world"],
-            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High },
+            Reasoning = new() { Effort = ReasoningEffort.Low },
             AdditionalProperties = new()
             {
                 ["service_tier"] = "value1",
@@ -181,10 +181,10 @@ public class OpenTelemetryChatClientTests
         Assert.Equal(7, activity.GetTagItem("gen_ai.request.top_k"));
         Assert.Equal(123, activity.GetTagItem("gen_ai.request.max_tokens"));
         Assert.Equal("""["hello", "world"]""", activity.GetTagItem("gen_ai.request.stop_sequences"));
-        Assert.Equal("high", activity.GetTagItem("gen_ai.request.reasoning.level"));
         Assert.Equal(enableSensitiveData ? "value1" : null, activity.GetTagItem("service_tier"));
         Assert.Equal(enableSensitiveData ? "value2" : null, activity.GetTagItem("SomethingElse"));
         Assert.Equal(42L, activity.GetTagItem("gen_ai.request.seed"));
+        Assert.Equal("low", activity.GetTagItem("gen_ai.request.reasoning.level"));
 
         Assert.Equal("id123", activity.GetTagItem("gen_ai.response.id"));
         Assert.Equal("""["stop"]""", activity.GetTagItem("gen_ai.response.finish_reasons"));
@@ -447,8 +447,8 @@ public class OpenTelemetryChatClientTests
                 new TextReasoningContent("User reasoning"),
                 new DataContent(Convert.FromBase64String("ZGF0YSBjb250ZW50"), "audio/mp3"),
                 new UriContent(new Uri("https://example.com/video.mp4"), "video/mp4"),
-                new DataContent(Convert.FromBase64String("cGRmIGNvbnRlbnQ="), "application/pdf"),
                 new HostedFileContent("file-xyz789"),
+                new DataContent(Convert.FromBase64String("JVBER"), "application/pdf"),
             ]),
             new(ChatRole.Assistant, [new FunctionCallContent("call-456", "SearchFiles")]),
             new(ChatRole.Tool, [new FunctionResultContent("call-456", "Found 3 files")]),
@@ -496,14 +496,14 @@ public class OpenTelemetryChatClientTests
                     "modality": "video"
                   },
                   {
-                    "type": "blob",
-                    "content": "cGRmIGNvbnRlbnQ=",
-                    "mime_type": "application/pdf",
-                    "modality": "document"
-                  },
-                  {
                     "type": "file",
                     "file_id": "file-xyz789"
+                  },
+                  {
+                    "type": "blob",
+                    "content": "JVBER",
+                    "mime_type": "application/pdf",
+                    "modality": "document"
                   }
                 ]
               },

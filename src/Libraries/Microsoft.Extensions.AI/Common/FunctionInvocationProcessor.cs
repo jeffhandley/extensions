@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -24,6 +25,7 @@ internal sealed class FunctionInvocationProcessor
     private readonly ActivitySource? _activitySource;
     private readonly Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> _invokeFunction;
     private readonly Func<Activity?, bool> _isSensitiveDataEnabled;
+    private readonly Histogram<double>? _executeToolDurationHistogram;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="FunctionInvocationProcessor"/> class.
@@ -36,16 +38,23 @@ internal sealed class FunctionInvocationProcessor
     /// Receives the invoke agent activity (or null if not in agent context).
     /// Returns true if sensitive data should be logged/tagged, false otherwise.
     /// </param>
+    /// <param name="executeToolDurationHistogram">
+    /// Optional histogram for recording <c>gen_ai.execute_tool.duration</c> per the OpenTelemetry GenAI semantic conventions.
+    /// When non-null, the duration of each tool execution is recorded with <c>gen_ai.tool.name</c>, <c>gen_ai.tool.type</c>,
+    /// and <c>error.type</c> (on failure) tags.
+    /// </param>
     public FunctionInvocationProcessor(
         ILogger logger,
         ActivitySource? activitySource,
         Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> invokeFunction,
-        Func<Activity?, bool>? isSensitiveDataEnabled = null)
+        Func<Activity?, bool>? isSensitiveDataEnabled = null,
+        Histogram<double>? executeToolDurationHistogram = null)
     {
         _logger = logger;
         _activitySource = activitySource;
         _invokeFunction = invokeFunction;
         _isSensitiveDataEnabled = isSensitiveDataEnabled ?? (_ => false);
+        _executeToolDurationHistogram = executeToolDurationHistogram;
     }
 
     /// <summary>
@@ -199,15 +208,18 @@ internal sealed class FunctionInvocationProcessor
         }
 
         object? result = null;
+        string? errorType = null;
         try
         {
             result = await _invokeFunction(context, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception e)
         {
+            errorType = e.GetType().FullName;
+
             if (activity is not null)
             {
-                _ = activity.SetTag(OpenTelemetryConsts.Error.Type, e.GetType().FullName)
+                _ = activity.SetTag(OpenTelemetryConsts.Error.Type, errorType)
                             .SetStatus(ActivityStatusCode.Error, e.Message);
             }
 
@@ -244,6 +256,22 @@ internal sealed class FunctionInvocationProcessor
             if (!loggedResult && _logger.IsEnabled(LogLevel.Debug))
             {
                 FunctionInvocationLogger.LogInvocationCompleted(_logger, context.Function.Name, FunctionInvocationHelpers.GetElapsedTime(startingTimestamp));
+            }
+
+            if (_executeToolDurationHistogram is not null)
+            {
+                double durationS = FunctionInvocationHelpers.GetElapsedTime(startingTimestamp).TotalSeconds;
+                TagList tags = new()
+                {
+                    { OpenTelemetryConsts.GenAI.Tool.Name, context.Function.Name },
+                    { OpenTelemetryConsts.GenAI.Tool.Type, OpenTelemetryConsts.ToolTypeFunction },
+                };
+                if (errorType is not null)
+                {
+                    tags.Add(OpenTelemetryConsts.Error.Type, errorType);
+                }
+
+                _executeToolDurationHistogram.Record(durationS, tags);
             }
         }
 

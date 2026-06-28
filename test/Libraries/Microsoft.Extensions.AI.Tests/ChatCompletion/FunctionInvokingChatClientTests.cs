@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.Metrics.Testing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using OpenTelemetry.Trace;
@@ -1124,6 +1125,10 @@ public class FunctionInvokingChatClientTests
                 .Build() :
                 null;
 
+            using var executeToolDurationCollector = enableTelemetry
+                ? new MetricCollector<double>(null, sourceName, "gen_ai.execute_tool.duration")
+                : null;
+
             await work();
 
             if (enableTelemetry)
@@ -1156,6 +1161,13 @@ public class FunctionInvokingChatClientTests
                     // Activities are exported in the order of completion, so all except the last are children of the last (i.e., outer)
                     Assert.Same(activities[activities.Count - 1], activities[i].Parent);
                 }
+
+                // Verify gen_ai.execute_tool.duration metric recorded for the function call
+                var measurement = Assert.Single(executeToolDurationCollector!.GetMeasurementSnapshot());
+                Assert.True(measurement.Value >= 0);
+                Assert.Equal("Func1", measurement.Tags["gen_ai.tool.name"]);
+                Assert.Equal("function", measurement.Tags["gen_ai.tool.type"]);
+                Assert.False(measurement.Tags.ContainsKey("error.type"));
             }
             else
             {

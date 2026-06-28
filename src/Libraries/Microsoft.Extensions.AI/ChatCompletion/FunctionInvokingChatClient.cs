@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.Metrics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -79,6 +80,12 @@ public class FunctionInvokingChatClient : DelegatingChatClient
     /// <remarks>This component does not own the instance and should not dispose it.</remarks>
     private readonly ActivitySource? _activitySource;
 
+    /// <summary>The <see cref="Meter"/> for tool-execution duration metrics. Owned and disposed by this instance.</summary>
+    private readonly Meter? _meter;
+
+    /// <summary>The histogram for recording <c>gen_ai.execute_tool.duration</c>.</summary>
+    private readonly Histogram<double>? _executeToolDurationHistogram;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="FunctionInvokingChatClient"/> class.
     /// </summary>
@@ -91,6 +98,23 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         _logger = (ILogger?)loggerFactory?.CreateLogger<FunctionInvokingChatClient>() ?? NullLogger.Instance;
         _activitySource = innerClient.GetService<ActivitySource>();
         FunctionInvocationServices = functionInvocationServices;
+
+        if (_activitySource is not null)
+        {
+            _meter = new Meter(_activitySource.Name);
+            _executeToolDurationHistogram = OtelMetricHelpers.CreateGenAIExecuteToolDurationHistogram(_meter);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _meter?.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     /// <summary>Gets the function invocation processor, creating it lazily.</summary>
@@ -101,7 +125,8 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         invokeAgentActivity =>
             invokeAgentActivity is not null
                 ? invokeAgentActivity.GetCustomProperty(OpenTelemetryChatClient.SensitiveDataEnabledCustomKey) as string is OpenTelemetryChatClient.SensitiveDataEnabledTrueValue
-                : InnerClient.GetService<OpenTelemetryChatClient>()?.EnableSensitiveData is true);
+                : InnerClient.GetService<OpenTelemetryChatClient>()?.EnableSensitiveData is true,
+        _executeToolDurationHistogram);
 
     /// <summary>
     /// Gets or sets the <see cref="FunctionInvocationContext"/> for the current function invocation.

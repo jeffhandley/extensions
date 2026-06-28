@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,6 +68,12 @@ internal sealed class FunctionInvokingRealtimeClientSession : IRealtimeClientSes
     /// <remarks>This component does not own the instance and should not dispose it.</remarks>
     private readonly ActivitySource? _activitySource;
 
+    /// <summary>The <see cref="Meter"/> for tool-execution duration metrics. Owned and disposed by this instance.</summary>
+    private readonly Meter? _meter;
+
+    /// <summary>The histogram for recording <c>gen_ai.execute_tool.duration</c>.</summary>
+    private readonly Histogram<double>? _executeToolDurationHistogram;
+
     /// <summary>The inner session to delegate to.</summary>
     private readonly IRealtimeClientSession _innerSession;
 
@@ -87,13 +94,20 @@ internal sealed class FunctionInvokingRealtimeClientSession : IRealtimeClientSes
         _logger = (ILogger?)loggerFactory?.CreateLogger<FunctionInvokingRealtimeClientSession>() ?? NullLogger.Instance;
         _activitySource = innerSession.GetService<ActivitySource>();
         FunctionInvocationServices = functionInvocationServices;
+
+        if (_activitySource is not null)
+        {
+            _meter = new Meter(_activitySource.Name);
+            _executeToolDurationHistogram = OtelMetricHelpers.CreateGenAIExecuteToolDurationHistogram(_meter);
+        }
     }
 
     /// <summary>Gets the function invocation processor, creating it lazily.</summary>
     private FunctionInvocationProcessor Processor => field ??= new FunctionInvocationProcessor(
         _logger,
         _activitySource,
-        InvokeFunctionAsync);
+        InvokeFunctionAsync,
+        executeToolDurationHistogram: _executeToolDurationHistogram);
 
     /// <summary>
     /// Gets or sets the <see cref="FunctionInvocationContext"/> for the current function invocation.
@@ -141,6 +155,7 @@ internal sealed class FunctionInvokingRealtimeClientSession : IRealtimeClientSes
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        _meter?.Dispose();
         await _innerSession.DisposeAsync().ConfigureAwait(false);
     }
 
