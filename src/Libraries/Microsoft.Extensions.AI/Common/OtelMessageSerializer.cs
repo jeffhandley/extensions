@@ -264,11 +264,35 @@ internal static class OtelMessageSerializer
             if (pos >= 0)
             {
                 ReadOnlySpan<char> topLevel = mediaType.AsSpan(0, pos);
-                return
-                    topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
-                    topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
-                    topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
-                    null;
+                if (topLevel.Equals("image", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "image";
+                }
+
+                if (topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "audio";
+                }
+
+                if (topLevel.Equals("video", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "video";
+                }
+
+                if (topLevel.Equals("application", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadOnlySpan<char> subType = mediaType.AsSpan(pos + 1);
+                    if (subType.Equals("pdf", StringComparison.OrdinalIgnoreCase) ||
+                        subType.Equals("msword", StringComparison.OrdinalIgnoreCase) ||
+                        subType.Equals("vnd.ms-excel", StringComparison.OrdinalIgnoreCase) ||
+                        subType.Equals("vnd.ms-powerpoint", StringComparison.OrdinalIgnoreCase) ||
+                        subType.Equals("rtf", StringComparison.OrdinalIgnoreCase) ||
+                        subType.StartsWith("vnd.openxmlformats-officedocument.", StringComparison.OrdinalIgnoreCase) ||
+                        subType.StartsWith("vnd.oasis.opendocument.", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return "document";
+                    }
+                }
             }
         }
 

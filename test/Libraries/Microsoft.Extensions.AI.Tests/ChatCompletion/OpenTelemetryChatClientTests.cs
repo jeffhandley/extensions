@@ -130,6 +130,7 @@ public class OpenTelemetryChatClientTests
             ResponseFormat = ChatResponseFormat.Json,
             Temperature = 6.0f,
             Seed = 42,
+            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.High },
             StopSequences = ["hello", "world"],
             AdditionalProperties = new()
             {
@@ -178,6 +179,7 @@ public class OpenTelemetryChatClientTests
         Assert.Equal(5.0f, activity.GetTagItem("gen_ai.request.presence_penalty"));
         Assert.Equal(6.0f, activity.GetTagItem("gen_ai.request.temperature"));
         Assert.Equal(7, activity.GetTagItem("gen_ai.request.top_k"));
+        Assert.Equal("high", activity.GetTagItem("gen_ai.request.reasoning.level"));
         Assert.Equal(123, activity.GetTagItem("gen_ai.request.max_tokens"));
         Assert.Equal("""["hello", "world"]""", activity.GetTagItem("gen_ai.request.stop_sequences"));
         Assert.Equal(enableSensitiveData ? "value1" : null, activity.GetTagItem("service_tier"));
@@ -444,7 +446,9 @@ public class OpenTelemetryChatClientTests
                 new TextContent("User request text"),
                 new TextReasoningContent("User reasoning"),
                 new DataContent(Convert.FromBase64String("ZGF0YSBjb250ZW50"), "audio/mp3"),
+                new DataContent(Convert.FromBase64String("cGRmY29udGVudA=="), "application/pdf"),
                 new UriContent(new Uri("https://example.com/video.mp4"), "video/mp4"),
+                new UriContent(new Uri("https://example.com/doc.docx"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 new HostedFileContent("file-xyz789"),
             ]),
             new(ChatRole.Assistant, [new FunctionCallContent("call-456", "SearchFiles")]),
@@ -487,10 +491,22 @@ public class OpenTelemetryChatClientTests
                     "modality": "audio"
                   },
                   {
+                    "type": "blob",
+                    "content": "cGRmY29udGVudA==",
+                    "mime_type": "application/pdf",
+                    "modality": "document"
+                  },
+                  {
                     "type": "uri",
                     "uri": "https://example.com/video.mp4",
                     "mime_type": "video/mp4",
                     "modality": "video"
+                  },
+                  {
+                    "type": "uri",
+                    "uri": "https://example.com/doc.docx",
+                    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "modality": "document"
                   },
                   {
                     "type": "file",
