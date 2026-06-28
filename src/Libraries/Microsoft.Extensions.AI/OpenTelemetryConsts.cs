@@ -129,6 +129,7 @@ internal static class OpenTelemetryConsts
             public const string Seed = "gen_ai.request.seed";
             public const string StopSequences = "gen_ai.request.stop_sequences";
             public const string Stream = "gen_ai.request.stream";
+            public const string ReasoningLevel = "gen_ai.request.reasoning.level";
             public const string Temperature = "gen_ai.request.temperature";
             public const string TopK = "gen_ai.request.top_k";
             public const string TopP = "gen_ai.request.top_p";

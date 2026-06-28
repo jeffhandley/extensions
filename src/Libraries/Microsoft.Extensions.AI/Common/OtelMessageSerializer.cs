@@ -255,11 +255,16 @@ internal static class OtelMessageSerializer
         return JsonSerializer.Serialize(output, DefaultOptions.GetTypeInfo(typeof(IList<object>)));
     }
 
-    /// <summary>Derives the OTel <c>modality</c> classifier from a media type.</summary>
+    /// <summary>Derives the OTel <c>modality</c> classifier from a media type's top-level type.</summary>
     internal static string? DeriveModalityFromMediaType(string? mediaType)
     {
         if (mediaType is not null)
         {
+            if (IsDocumentMediaType(mediaType))
+            {
+                return "document";
+            }
+
             int pos = mediaType.IndexOf('/');
             if (pos >= 0)
             {
@@ -268,7 +273,6 @@ internal static class OtelMessageSerializer
                     topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
                     topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
                     topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
-                    IsDocumentMediaType(mediaType) ? "document" :
                     null;
             }
         }
