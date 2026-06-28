@@ -445,6 +445,8 @@ public class OpenTelemetryChatClientTests
                 new TextReasoningContent("User reasoning"),
                 new DataContent(Convert.FromBase64String("ZGF0YSBjb250ZW50"), "audio/mp3"),
                 new UriContent(new Uri("https://example.com/video.mp4"), "video/mp4"),
+                new DataContent(Convert.FromBase64String("dGVzdA=="), "application/pdf"),
+                new UriContent(new Uri("https://example.com/report.docx"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
                 new HostedFileContent("file-xyz789"),
             ]),
             new(ChatRole.Assistant, [new FunctionCallContent("call-456", "SearchFiles")]),
@@ -493,8 +495,20 @@ public class OpenTelemetryChatClientTests
                     "modality": "video"
                   },
                   {
-                    "type": "file",
-                    "file_id": "file-xyz789"
+                   "type": "blob",
+                   "content": "dGVzdA==",
+                   "mime_type": "application/pdf",
+                   "modality": "document"
+                  },
+                  {
+                   "type": "uri",
+                   "uri": "https://example.com/report.docx",
+                   "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                   "modality": "document"
+                  },
+                  {
+                   "type": "file",
+                   "file_id": "file-xyz789"
                   }
                 ]
               },
