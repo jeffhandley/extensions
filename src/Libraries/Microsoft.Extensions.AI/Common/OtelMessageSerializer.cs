@@ -264,16 +264,37 @@ internal static class OtelMessageSerializer
             if (pos >= 0)
             {
                 ReadOnlySpan<char> topLevel = mediaType.AsSpan(0, pos);
-                return
-                    topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
-                    topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
-                    topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
-                    null;
+                if (topLevel.Equals("image", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "image";
+                }
+
+                if (topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "audio";
+                }
+
+                if (topLevel.Equals("video", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "video";
+                }
+
+                if (IsDocumentMediaType(mediaType))
+                {
+                    return "document";
+                }
             }
         }
 
         return null;
     }
+
+    private static bool IsDocumentMediaType(string mediaType) =>
+        mediaType.StartsWith("application/pdf", StringComparison.OrdinalIgnoreCase) ||
+        mediaType.StartsWith("application/msword", StringComparison.OrdinalIgnoreCase) ||
+        mediaType.StartsWith("application/vnd.openxmlformats-officedocument.", StringComparison.OrdinalIgnoreCase) ||
+        mediaType.StartsWith("application/vnd.ms-excel", StringComparison.OrdinalIgnoreCase) ||
+        mediaType.StartsWith("application/vnd.ms-powerpoint", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Extracts code text from code interpreter inputs.</summary>
     /// <remarks>

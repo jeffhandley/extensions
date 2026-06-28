@@ -131,6 +131,7 @@ public class OpenTelemetryChatClientTests
             Temperature = 6.0f,
             Seed = 42,
             StopSequences = ["hello", "world"],
+            Reasoning = new ReasoningOptions { Effort = ReasoningEffort.Medium },
             AdditionalProperties = new()
             {
                 ["service_tier"] = "value1",
@@ -178,6 +179,7 @@ public class OpenTelemetryChatClientTests
         Assert.Equal(5.0f, activity.GetTagItem("gen_ai.request.presence_penalty"));
         Assert.Equal(6.0f, activity.GetTagItem("gen_ai.request.temperature"));
         Assert.Equal(7, activity.GetTagItem("gen_ai.request.top_k"));
+        Assert.Equal("medium", activity.GetTagItem("gen_ai.request.reasoning.level"));
         Assert.Equal(123, activity.GetTagItem("gen_ai.request.max_tokens"));
         Assert.Equal("""["hello", "world"]""", activity.GetTagItem("gen_ai.request.stop_sequences"));
         Assert.Equal(enableSensitiveData ? "value1" : null, activity.GetTagItem("service_tier"));
@@ -445,6 +447,7 @@ public class OpenTelemetryChatClientTests
                 new TextReasoningContent("User reasoning"),
                 new DataContent(Convert.FromBase64String("ZGF0YSBjb250ZW50"), "audio/mp3"),
                 new UriContent(new Uri("https://example.com/video.mp4"), "video/mp4"),
+                new DataContent(Convert.FromBase64String("JVBERi0xLjQ="), "application/pdf"),
                 new HostedFileContent("file-xyz789"),
             ]),
             new(ChatRole.Assistant, [new FunctionCallContent("call-456", "SearchFiles")]),
@@ -491,6 +494,12 @@ public class OpenTelemetryChatClientTests
                     "uri": "https://example.com/video.mp4",
                     "mime_type": "video/mp4",
                     "modality": "video"
+                  },
+                  {
+                    "type": "blob",
+                    "content": "JVBERi0xLjQ=",
+                    "mime_type": "application/pdf",
+                    "modality": "document"
                   },
                   {
                     "type": "file",
