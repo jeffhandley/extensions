@@ -264,16 +264,31 @@ internal static class OtelMessageSerializer
             if (pos >= 0)
             {
                 ReadOnlySpan<char> topLevel = mediaType.AsSpan(0, pos);
+                ReadOnlySpan<char> subtype = mediaType.AsSpan(pos + 1);
                 return
                     topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
                     topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
                     topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
+                    IsDocumentMediaType(topLevel, subtype) ? "document" :
                     null;
             }
         }
 
         return null;
     }
+
+    /// <summary>Returns <see langword="true"/> when the media type represents a document (PDF, Office, ODF, RTF, …).</summary>
+    private static bool IsDocumentMediaType(ReadOnlySpan<char> topLevel, ReadOnlySpan<char> subtype) =>
+        (topLevel.Equals("application", StringComparison.OrdinalIgnoreCase) && (
+            subtype.Equals("pdf", StringComparison.OrdinalIgnoreCase) ||
+            subtype.Equals("msword", StringComparison.OrdinalIgnoreCase) ||
+            subtype.Equals("rtf", StringComparison.OrdinalIgnoreCase) ||
+            subtype.StartsWith("vnd.openxmlformats-officedocument", StringComparison.OrdinalIgnoreCase) ||
+            subtype.StartsWith("vnd.ms-excel", StringComparison.OrdinalIgnoreCase) ||
+            subtype.StartsWith("vnd.ms-powerpoint", StringComparison.OrdinalIgnoreCase) ||
+            subtype.StartsWith("vnd.oasis.opendocument", StringComparison.OrdinalIgnoreCase))) ||
+        (topLevel.Equals("text", StringComparison.OrdinalIgnoreCase) &&
+            subtype.Equals("rtf", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Extracts code text from code interpreter inputs.</summary>
     /// <remarks>
