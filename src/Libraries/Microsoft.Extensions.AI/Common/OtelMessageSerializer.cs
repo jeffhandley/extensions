@@ -255,7 +255,7 @@ internal static class OtelMessageSerializer
         return JsonSerializer.Serialize(output, DefaultOptions.GetTypeInfo(typeof(IList<object>)));
     }
 
-    /// <summary>Derives the OTel <c>modality</c> classifier from a media type's top-level type.</summary>
+    /// <summary>Derives the OTel <c>modality</c> classifier from a media type.</summary>
     internal static string? DeriveModalityFromMediaType(string? mediaType)
     {
         if (mediaType is not null)
@@ -268,12 +268,19 @@ internal static class OtelMessageSerializer
                     topLevel.Equals("image", StringComparison.OrdinalIgnoreCase) ? "image" :
                     topLevel.Equals("audio", StringComparison.OrdinalIgnoreCase) ? "audio" :
                     topLevel.Equals("video", StringComparison.OrdinalIgnoreCase) ? "video" :
+                    IsDocumentMediaType(mediaType) ? "document" :
                     null;
             }
         }
 
         return null;
     }
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="mediaType"/> identifies a document format
+    /// such as PDF or an OpenXML office document.</summary>
+    private static bool IsDocumentMediaType(string mediaType) =>
+        mediaType.Equals("application/pdf", StringComparison.OrdinalIgnoreCase) ||
+        mediaType.StartsWith("application/vnd.openxmlformats-officedocument.", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Extracts code text from code interpreter inputs.</summary>
     /// <remarks>
