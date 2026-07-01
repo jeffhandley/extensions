@@ -76,6 +76,14 @@ if: ${{ github.event_name == 'workflow_dispatch' || !github.event.repository.for
 on:
   schedule: daily
   workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: >-
+          Optional git ref (branch, tag, or commit SHA) in
+          open-telemetry/semantic-conventions-genai to scan instead of the
+          default-branch HEAD. Leave empty to scan the default-branch HEAD.
+        required: false
+        type: string
   permissions: {}
 
 # ###############################################################
@@ -137,9 +145,19 @@ governs **lifecycle/idempotency** (which PR to touch and what state to leave it 
 
 ## Step 1 -- Capture the upstream state
 
-1. Read the latest state of `open-telemetry/semantic-conventions-genai` on its
-   default branch:
-   - Current **HEAD commit SHA** (`Upstream-Scan-Ref`).
+**Which upstream ref to scan.** By default this run scans the **default-branch HEAD**
+of `open-telemetry/semantic-conventions-genai`. When dispatched with an
+`upstream_ref` input, scan that ref instead -- the value is
+`${{ github.event.inputs.upstream_ref }}`: if it is non-empty, treat it as a git ref
+(branch, tag, or commit SHA) in that repo and scan it instead of the default-branch
+HEAD; if it is empty (every scheduled run, and dispatches that leave it blank), scan
+the default-branch HEAD. Resolve whichever ref applies to a concrete commit SHA and
+record that SHA as `Upstream-Scan-Ref`; all downstream logic (the SHA comparison in
+Step 3, the tracking block) uses that resolved SHA.
+
+1. Read the state of `open-telemetry/semantic-conventions-genai` at the scanned ref
+   (the `upstream_ref` override when provided, otherwise its default branch):
+   - The scanned ref's **commit SHA** (`Upstream-Scan-Ref`).
    - Whether a tagged **release** exists/is published (`Upstream-Release`); record
      `none` while the conventions are still unreleased (Development stability). A
      value of `none` is the expected normal case and must **not** cause a no-op or
@@ -170,7 +188,7 @@ implementation. Drive the work from the audit table and the ordered work-item li
 skill produces, then implement directly in Step 4.
 
 Do the **full** convention cross-reference -- compare the gen-ai attributes,
-metrics, events, and operation names defined at the upstream HEAD against what the
+metrics, events, and operation names defined at the scanned upstream commit against what the
 code actually emits (the implemented version from the doc comments). Drive this from
 the conventions themselves, not from the upstream CHANGELOG: a `Development`-stability
 upstream commonly shows `Unreleased`/no tag while still carrying merged convention
@@ -187,7 +205,7 @@ classification, implementation patterns, testing guidance, and validation comman
 
 This workflow tracks **merged upstream gen-ai convention changes regardless of
 whether a release is published.** Each merged upstream PR (e.g. every
-`changelog.d/*.md` fragment, or any convention change present at the upstream HEAD
+`changelog.d/*.md` fragment, or any convention change present at the scanned upstream commit
 but not yet reflected in the implemented version) is a tracked change. Treat the
 set of such changes ahead of the implemented version as the work to integrate.
 
@@ -244,7 +262,7 @@ integration and mark the PR Ready for Review) regardless of the SHA comparison -
 published release on an already-integrated HEAD must still flip the draft to Ready, so
 it is never a no-op.
 
-Otherwise compare the PR's recorded `Upstream-Scan-Ref` to the upstream HEAD SHA from
+Otherwise compare the PR's recorded `Upstream-Scan-Ref` to the scanned upstream SHA from
 Step 1 and pick the matching action. The SHA comparison is the primary decision; the
 PR's draft/merged state only matters when the PR is **behind**.
 
@@ -377,7 +395,7 @@ state). Fill every field from Step 1:
 ```yaml
 # otel-genai-tracking:begin
 Upstream-Repo: open-telemetry/semantic-conventions-genai
-Upstream-Scan-Ref: <upstream HEAD commit SHA>
+Upstream-Scan-Ref: <scanned upstream commit SHA>
 Upstream-Scan-Date: <ISO-8601 UTC timestamp of this run>
 Upstream-Release: <release version or "none">
 Core-Semconv-Dependency: <core semantic-conventions version>
@@ -415,7 +433,7 @@ here):
   `noop` safe output, and **also** write a short explanation to the GitHub Actions
   **step summary** (see below). Do not create any repository-visible artifact.
 - A no-op is valid in only two cases: (a) a matching PR's recorded `Upstream-Scan-Ref`
-  equals the upstream HEAD SHA **and** no newly published release is awaiting the
+  equals the scanned upstream SHA **and** no newly published release is awaiting the
   Step 6 mark-ready transition for that PR, or (b) the completed Step 2 cross-reference
   finds zero
   merged upstream gen-ai convention changes ahead of the implemented version. Case (b)
@@ -430,6 +448,6 @@ here):
   explanation to the file at `$GITHUB_STEP_SUMMARY` (for example
   `echo "..." >> "$GITHUB_STEP_SUMMARY"`). This summary is attached to the workflow
   run only -- it is **not** a repository-visible report. Include: the target
-  `{target}`, the upstream HEAD SHA, the scan timestamp, which of the two no-op
+  `{target}`, the scanned upstream SHA, the scan timestamp, which of the two no-op
   conditions was met, and -- when condition (a) applies -- the matched PR number/URL
   and its state (open draft / open / merged).
