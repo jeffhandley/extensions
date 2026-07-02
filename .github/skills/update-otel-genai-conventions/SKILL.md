@@ -17,7 +17,7 @@ agent: 'agent'
 tools: ['github/*', 'sql']
 ---
 
-# Update OTel Gen-AI Conventions
+# Update OTel GenAI Conventions
 
 Analyze OpenTelemetry GenAI semantic-conventions changes — PRs, changelog snapshots, date ranges, or releases — primarily from [`open-telemetry/semantic-conventions-genai`](https://github.com/open-telemetry/semantic-conventions-genai), and produce compensating updates in `dotnet/extensions`. See the [Migration Note](#migration-note) below for context, including where these conventions were previously managed.
 
@@ -207,7 +207,7 @@ Search using the requested release version, CHANGELOG ref, date range, or upstre
 
 Do not silently ignore search failures. If GitHub search/listing is unavailable, report the problem and ask the user whether to proceed without the preflight.
 
-A standing **upstream-scan tracking PR** (one carrying the `otel-genai-tracking` state block) is the exception: it is the durable scan record, not a blocking duplicate. When the preflight surfaces it, refresh it per **Refreshing the tracking PR** in [references/pr-description.md](references/pr-description.md#refreshing-the-tracking-pr) instead of stopping.
+A standing **upstream-scan tracking PR** (one carrying the `otel-genai-tracking` state block) is the exception: it is the durable scan record, not a blocking duplicate. When the preflight surfaces it, continue rather than stopping -- the maintaining workflow owns how that PR is created and incremented.
 
 ### Analyzing the Release / PRs
 
@@ -221,7 +221,7 @@ For Step 4, read the source files listed in [references/file-inventory.md](refer
 
 ### PR Title and Description Guidance
 
-When creating or updating a PR after implementing GenAI semantic-conventions changes (from either repo), follow [references/pr-description.md](references/pr-description.md) for the title format and the changes-table shape. For a recurring **upstream-scan tracking PR** (the kind carrying the `otel-genai-tracking` state block), that reference also defines the full body template -- the implemented-changes table, the merged and in-flight applicability tables, and, at the very bottom, the machine-readable tracking state block (the body ends there). The refresh procedure for that PR lives in the skill itself, not in the PR body.
+When creating or updating a PR after implementing GenAI semantic-conventions changes (from either repo), follow [references/pr-description.md](references/pr-description.md) for the title format and the changes-table shape. For a recurring **upstream-scan tracking PR** (the kind carrying the `otel-genai-tracking` state block), that reference also defines the full body template -- the implemented-changes table, the merged and in-flight applicability tables, and, at the very bottom, the machine-readable tracking state block (the body ends there).
 
 ---
 
@@ -353,7 +353,7 @@ Critical knowledge from past PR reviews that should inform all modes:
 - **No CHANGELOGs**: This repository no longer maintains per-library CHANGELOG.md files. Do NOT create or update any CHANGELOG files.
 - **Source-generated JSON**: Adding new OTel part types requires: (1) new inner class, (2) `[JsonSerializable]` registration on `OtelContext`, (3) switch case in `SerializeChatMessages()`.
 - **LoggerMessage text**: When using `[LoggerMessage]`, the message text should match the OTel event name for console logger readability.
-- **No orphan constants**: Never add a constant to `OpenTelemetryConsts.cs` unless the same PR also adds at least one emission site for it. If the convention defines an attribute that no current client populates, classify the change as 🟢 *Constant not yet emitted* and defer the constant — do not add it ahead of emission. Verify with `grep -rn NewConstantName src/Libraries/Microsoft.Extensions.AI/` before submitting.
+- **No orphan constants**: Never add a constant to `OpenTelemetryConsts.cs` unless the same PR also adds at least one emission site for it. If the convention defines an attribute that no current client populates, classify the change as 🟢 *Constant not yet emitted* and defer the constant — do not add it ahead of emission. Verify with `grep -rn NewConstantName src/Libraries/Microsoft.Extensions.AI/` before submitting. This defer rule applies **only** to brand-new attributes/metrics that have no emission site. A change to a convention item the code **already emits** — a type/unit change (e.g. `gen_ai.request.top_k` `double` → `int`), a requiredness/scope change, a rename, a sampling-relevance change, or a new well-known value for an already-emitted attribute — is actionable and must be applied in the same pass, not deferred. Deferral marks individual constants; it is never a reason to skip the overall update.
 - **Area-aware constants**: Pick the nested class in `OpenTelemetryConsts.cs` based on the upstream area: `GenAI.*` for `gen-ai/*`, `MCP.*` for `mcp/*`. Provider-specific attributes (`openai.*`, `anthropic.*`, `aws-bedrock.*`, `azure-ai-inference.*`) generally belong in the **provider package's** constants file, not in `Microsoft.Extensions.AI/OpenTelemetryConsts.cs`. See [references/implementation-patterns.md §Area placement guidance](references/implementation-patterns.md#area-placement-guidance).
 
 ## Validation
