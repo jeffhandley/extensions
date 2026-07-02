@@ -103,7 +103,7 @@ on:
 
 # Before the agent runs, deterministically prepare the run: resolve the upstream scan
 # target (from the manager's `target` input, or a standalone dispatch's upstream_ref /
-# default HEAD), discover and classify the maintained draft PR (ours / blocked /
+# default HEAD), discover and classify the maintained draft PR (ours / adopt / blocked /
 # none), compute the recommended lifecycle action, and build the reviewer-feedback batch.
 # The agent consumes target.json + feedback.json instead of discovering state itself, and
 # stamps the run start time (feedback-meta.json's run_started_at) back as the new
@@ -278,6 +278,10 @@ re-discover this state yourself):
   - `classification` -- one of:
     - `ours` -- an open `automation`+`area-ai` PR on `desired_branch` that already
       carries our `otel-genai-tracking` block. Maintain it.
+    - `adopt` -- an open `automation`+`area-ai` PR on `desired_branch` that a human
+      **bootstrapped** but that has **no** tracking block yet. **Take it over**:
+      treat it like an incremental update, and write the full tracking block into its
+      body this run so future runs classify it as `ours`.
     - `blocked` -- a PR occupies `desired_branch` but is **not** our automation PR (a
       human owns it). **Stand down**: emit a `noop` explaining a human-owned PR holds
       the branch, and make no other output.
@@ -393,8 +397,9 @@ The host setup already discovered the maintained PR and recorded it in `target.j
   the reference rather than failing.
 - `classification` = `blocked` -> a human owns a PR on `desired_branch`: emit a `noop`
   saying so and make no other output.
-- `classification` = `ours` -> compare `pr_recorded_sha` to `upstream_sha`
-  and pick the row below.
+- `classification` = `ours` or `adopt` -> compare `pr_recorded_sha` to `upstream_sha`
+  and pick the row below. For `adopt`, additionally write the **full tracking block**
+  into the body this run (the bootstrapped PR has none yet) so it becomes `ours`.
 
 First check the **release gate**: if `upstream_release` is a published tag (not `none`)
 and the PR is an **open draft**, go straight to **Step 6** (validate the integration and
@@ -407,7 +412,7 @@ SHA comparison is the primary decision; the PR's draft state only matters when b
 | If the maintained PR is... | ...and it is | Action |
 |---|---|---|
 | caught up with the upstream SHA | open (draft or not) **or** merged | **No-op** -- no comment, report, issue, or PR; write the reason to the step summary (see no-op rules). (The release gate above already diverted the published-release + open-draft case to Step 6, so this row is reached only when no new release needs the mark-ready transition and there is no pending feedback.) |
-| **behind** the upstream SHA | open **draft** (`ours`) | **Incremental update.** Re-analyze against `main` plus what the branch already integrates; push one batch of commit(s) to the PR branch; refresh the PR body/tracking block; comment summarizing the delta. |
+| **behind** the upstream SHA | open **draft** (`ours` or `adopt`) | **Incremental update.** Re-analyze against `main` plus what the branch already integrates; push one batch of commit(s) to the PR branch; refresh the PR body/tracking block (for `adopt`, add the full tracking block); comment summarizing the delta. |
 | **behind** the upstream SHA | open **non-draft** | **Advisory only -- do not implement.** Comment capturing the additional upstream changes to consider; note that re-marking the PR as draft lets the next scheduled run implement them, and that the workflow can be dispatched manually to run immediately. |
 | `classification` = `none`, or a prior PR is **closed without merging** / **merged-but-behind** | absent, closed, or merged-but-behind | **Fresh PR** (Step 4). For a merged-but-behind PR you referenced, describe the updates layered on top. |
 
@@ -485,14 +490,15 @@ below). So:
   - title `Update open-telemetry/semantic-conventions-genai to {target}`,
   - the body described in Step 5,
   - draft state (configured by the safe output).
-- **Incremental path** (behind open draft, `ours`): the PR branch already
+- **Incremental path** (behind open draft, `ours` or `adopt`): the PR branch already
   exists on the remote (`target.json`'s `desired_branch`), so here you **do** fetch and
   check out that existing branch
   (`git fetch origin "$DESIRED_BRANCH" && git checkout "$DESIRED_BRANCH"`),
   apply only the differential work items on top of what is already integrated, stage
   the in-scope paths, and commit one batch of one or more commits. Then emit a
   `push-to-pull-request-branch` safe output targeting that PR, an `update-pull-request`
-  to refresh the body (and the tracking block), and a single `add-comment`
+  to refresh the body (and the tracking block -- for an `adopt` PR, add the full
+  tracking block that the bootstrapped PR was missing), and a single `add-comment`
   summarizing the delta.
 
 When the skill clones or fetches the upstream `semantic-conventions` repository for

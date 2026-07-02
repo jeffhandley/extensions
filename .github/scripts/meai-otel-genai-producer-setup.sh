@@ -6,7 +6,8 @@
 #   1. Resolves the upstream scan target (from the manager's `target` input, or from a
 #      standalone dispatch's upstream_ref / default HEAD).
 #   2. Discovers the maintained draft PR and classifies it: OURS (carries our tracking
-#      marker), BLOCKED (a non-automation PR occupying our branch -- a human owns it),
+#      marker), ADOPT (a human-bootstrapped automation+area-ai PR on our branch with no
+#      marker yet), BLOCKED (a non-automation PR occupying our branch -- a human owns it),
 #      or NONE.
 #   3. Reads the PR's recorded Upstream-Scan-Ref, Upstream-Release, and
 #      Feedback-Processed-Through watermark, and computes a recommended lifecycle action.
@@ -91,7 +92,7 @@ fi
 
 write_target() {
 	# $1=pr $2=pr_state $3=pr_is_draft $4=pr_recorded_sha $5=pr_recorded_release
-	# $6=classification(ours|blocked|none) $7=action $8=pending
+	# $6=classification(ours|adopt|blocked|none) $7=action $8=pending
 	jq -cn \
 		--arg upstream_repo "$UPSTREAM_REPO" --arg upstream_ref "$UPSTREAM_REF" \
 		--arg upstream_sha "$upstream_sha" --arg upstream_release "$upstream_release" \
@@ -139,7 +140,7 @@ fi
 
 # ---- 2. Discover the maintained PR and classify it ---------------------------------
 # List open PRs on our evergreen branch (lightweight fields only -- never bulk-fetch
-# bodies). Consider our automation+area-ai PR and any other PR
+# bodies). Consider BOTH automation+area-ai PRs (ours or bootstrapped) and any other PR
 # occupying the branch (human-owned -> blocked). Retry so a blip never drops the PR.
 pr="" pr_labels="" pr_is_draft="false" classification="none"
 for attempt in 1 2 3; do
@@ -161,9 +162,12 @@ if [ -n "$pr" ]; then
 	printf '%s' "$body" | grep -q "${MARKER_ID}-tracking:begin" && has_marker="true"
 	if [ "$has_automation" = "true" ] && [ "$has_marker" = "true" ]; then
 		classification="ours"
+	elif [ "$has_automation" = "true" ] && [ "$has_marker" != "true" ]; then
+		# Automation-labeled PR on our branch with no tracking marker yet: a human
+		# bootstrapped it -- adopt it (write the marker on this run's update).
+		classification="adopt"
 	else
-		# A PR occupies our branch that we can't confirm is ours (no tracking marker):
-		# treat it as human-owned and stand down.
+		# A PR occupies our branch but is not our automation PR: a human owns it. Stand down.
 		classification="blocked"
 	fi
 fi
@@ -227,10 +231,11 @@ case "$classification" in
 		action="noop" ;;
 	none)
 		action="produce" ;; # fresh
-	ours)
+	ours|adopt)
 		release_changed="false"
 		[ "$upstream_release" != "none" ] && [ "$upstream_release" != "$pr_recorded_release" ] && release_changed="true"
-		if [ -n "$upstream_sha" ] && [ -n "$pr_recorded_sha" ] \
+		if [ "$classification" = "ours" ] \
+			&& [ -n "$upstream_sha" ] && [ -n "$pr_recorded_sha" ] \
 			&& [ "$upstream_sha" = "$pr_recorded_sha" ] \
 			&& [ "$pending" -eq 0 ] \
 			&& [ "$release_changed" != "true" ]; then
