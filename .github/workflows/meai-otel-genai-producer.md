@@ -104,10 +104,12 @@ on:
 # Before the agent runs, deterministically prepare the run: resolve the upstream scan
 # target (from the manager's `target` input, or a standalone dispatch's upstream_ref /
 # default HEAD), discover and classify the maintained draft PR (ours / blocked /
-# none), and compute the recommended lifecycle action. The agent consumes target.json
-# instead of discovering state itself. The file is uploaded in the agent artifact.
+# none), compute the recommended lifecycle action, and build the reviewer-feedback batch.
+# The agent consumes target.json + feedback.json instead of discovering state itself, and
+# stamps the run start time (feedback-meta.json's run_started_at) back as the new
+# Feedback-Processed-Through watermark. All three files are uploaded in the agent artifact.
 steps:
-  - name: Set up the run context
+  - name: Set up the run context and reviewer feedback
     env:
       GH_TOKEN: ${{ github.token }}
       TARGET_JSON: ${{ inputs.target }}
@@ -115,12 +117,16 @@ steps:
     run: bash .github/scripts/meai-otel-genai-producer-setup.sh
 
 # After the agent runs, guard against manifest drift: every full-body pull-request write
-# must carry the tracking block and a non-empty Upstream-Scan-Ref. A PR/update body that
-# lost this identity means the run drifted off its contract, so fail before it can publish.
+# must carry the tracking block, a non-empty Upstream-Scan-Ref, and a
+# Feedback-Processed-Through watermark. A PR/update body that lost this identity means the
+# run drifted off its contract, so fail before it can publish. Also guarantee feedback.json
+# exists so the acknowledgement job never fails on a missing file.
 post-steps:
   - name: Validate agent output identity
     run: |
       set -euo pipefail
+      mkdir -p /tmp/gh-aw/agent
+      [ -f /tmp/gh-aw/agent/feedback.json ] || echo '[]' > /tmp/gh-aw/agent/feedback.json
       out=/tmp/gh-aw/agent_output.json
       if [ ! -f "$out" ]; then
         echo "::notice::No agent output to validate"; exit 0
@@ -145,6 +151,7 @@ post-steps:
         printf '%s' "$body" | grep -q 'otel-genai-tracking:begin' || miss="$miss begin-marker"
         printf '%s' "$body" | grep -q 'otel-genai-tracking:end'   || miss="$miss end-marker"
         printf '%s' "$body" | grep -Eq 'Upstream-Scan-Ref:[[:space:]]*[0-9a-fA-F]{7,}' || miss="$miss Upstream-Scan-Ref"
+        printf '%s' "$body" | grep -q 'Feedback-Processed-Through:' || miss="$miss Feedback-Processed-Through"
         if [ -n "$miss" ]; then
           echo "::error::$typ item #$i is missing required tracking identity:$miss"
           rc=1
@@ -152,6 +159,50 @@ post-steps:
       done <<< "$idx"
       [ "$rc" -eq 0 ] && echo "Agent output identity validated."
       exit $rc
+
+# Acknowledge the reviewer feedback surfaced this run by applying an :eyes: (👀) reaction
+# to each new write-access inline review comment in the setup's feedback batch. gh-aw strict mode
+# forbids the agent job from holding `pull-requests: write`, so this dedicated job -- which
+# runs outside the agent sandbox with the default GITHUB_TOKEN -- performs the write. The
+# reaction is a human-visible read receipt; cross-run dedup is driven by the
+# `Feedback-Processed-Through` watermark in the PR body, not by the reaction.
+jobs:
+  acknowledge_review_feedback:
+    name: Acknowledge processed review feedback
+    needs: [agent, activation]
+    if: always() && needs.agent.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download agent artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: ${{ needs.activation.outputs.artifact_prefix }}agent
+          path: /tmp/gh-aw/
+      - name: "Apply :eyes: to the new review comments in this run's batch"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          f=/tmp/gh-aw/agent/feedback.json
+          if [ ! -f "$f" ]; then
+            echo "::notice::No feedback batch -- nothing to acknowledge"; exit 0
+          fi
+          ids=$(jq -r '.[] | select(.kind=="review_thread") | .comments[]
+            | select(.is_new==true and (.assoc=="OWNER" or .assoc=="MEMBER" or .assoc=="COLLABORATOR"))
+            | .id' "$f" 2>/dev/null || true)
+          if [ -z "$ids" ]; then
+            echo "::notice::No new write-access review comments -- nothing to acknowledge"; exit 0
+          fi
+          echo "Acknowledging new write-access review comment(s) with an :eyes: reaction"
+          # Idempotent: re-reacting returns the existing reaction. Never fatal -- a denied
+          # or stale-id reaction must not fail the run.
+          while IFS= read -r id; do
+            [ -n "$id" ] || continue
+            gh api -X POST "repos/${GITHUB_REPOSITORY}/pulls/comments/${id}/reactions" -f content=eyes >/dev/null 2>&1 \
+              || echo "::warning::Could not add :eyes: reaction to review comment ${id}"
+          done <<< "$ids"
 
 # ###############################################################
 # Select a PAT from the pool and override COPILOT_GITHUB_TOKEN.
@@ -212,8 +263,8 @@ governs **lifecycle/idempotency** (which PR to touch and what state to leave it 
 
 ## Step 0 -- Read the run context (authoritative)
 
-Before you do anything, read the `target.json` file the host setup wrote under
-`/tmp/gh-aw/agent/` (it is the authoritative input for this run -- do not
+Before you do anything, read the two files the host setup wrote under
+`/tmp/gh-aw/agent/` (they are the authoritative inputs for this run -- do not
 re-discover this state yourself):
 
 - **`target.json`** -- the resolved scan target and PR discovery:
@@ -232,13 +283,17 @@ re-discover this state yourself):
       the branch, and make no other output.
     - `none` -- no PR on `desired_branch`; the fresh path applies.
   - `action` -- the setup's recommended lifecycle action (`produce` or `noop`). When
-    it is `noop` **and** `classification` is `ours` (caught up on the SHA, no new
-    release), you may **early-exit**: emit a single `noop` with the reason and do
-    **not** run the expensive build. For every other case run the full analysis and let
-    your Step 3 decision be authoritative -- `action` is only a hint.
+    it is `noop` **and** `classification` is `ours` (caught up on the SHA, no pending
+    feedback, no new release), you may **early-exit**: emit a single `noop` with the
+    reason and do **not** run the expensive build. For every other case run the full
+    analysis and let your Step 3 decision be authoritative -- `action` is only a hint.
+- **`feedback.json`** -- the reviewer-feedback batch to address this run (see
+  "Honoring reviewer feedback"). `feedback-meta.json` carries the `run_started_at`
+  timestamp you stamp back as the new `Feedback-Processed-Through` watermark.
 
 If `classification` is `blocked`, stop now with a `noop`. If `action` is `noop` and
-`classification` is `ours`, stop now with a `noop`. Otherwise continue.
+`classification` is `ours` with an empty `feedback.json`, stop now with a `noop`.
+Otherwise continue.
 
 ## Step 1 -- Capture the upstream state
 
@@ -351,7 +406,7 @@ SHA comparison is the primary decision; the PR's draft state only matters when b
 
 | If the maintained PR is... | ...and it is | Action |
 |---|---|---|
-| caught up with the upstream SHA | open (draft or not) **or** merged | **No-op** -- no comment, report, issue, or PR; write the reason to the step summary (see no-op rules). (The release gate above already diverted the published-release + open-draft case to Step 6, so this row is reached only when no new release needs the mark-ready transition.) |
+| caught up with the upstream SHA | open (draft or not) **or** merged | **No-op** -- no comment, report, issue, or PR; write the reason to the step summary (see no-op rules). (The release gate above already diverted the published-release + open-draft case to Step 6, so this row is reached only when no new release needs the mark-ready transition and there is no pending feedback.) |
 | **behind** the upstream SHA | open **draft** (`ours`) | **Incremental update.** Re-analyze against `main` plus what the branch already integrates; push one batch of commit(s) to the PR branch; refresh the PR body/tracking block; comment summarizing the delta. |
 | **behind** the upstream SHA | open **non-draft** | **Advisory only -- do not implement.** Comment capturing the additional upstream changes to consider; note that re-marking the PR as draft lets the next scheduled run implement them, and that the workflow can be dispatched manually to run immediately. |
 | `classification` = `none`, or a prior PR is **closed without merging** / **merged-but-behind** | absent, closed, or merged-but-behind | **Fresh PR** (Step 4). For a merged-but-behind PR you referenced, describe the updates layered on top. |
@@ -466,6 +521,59 @@ For **both** implementation paths:
 - Review the result thoroughly against the skill's review checklist before emitting
   output.
 
+### Honoring reviewer feedback on the maintained draft PR
+
+On the **incremental path** (a matching open draft PR already exists), a host-side
+setup step has already computed the reviewer-feedback batch for you and written it to
+`/tmp/gh-aw/agent/feedback.json`, with metadata in `/tmp/gh-aw/agent/feedback-meta.json`.
+Consume that batch before you commit the differential -- do **not** re-query the PR for
+feedback yourself:
+
+- **Read the batch.** `feedback.json` is a JSON array of items. Each item is either a
+  submitted PR review (`"kind":"review"`, with `state` and `body`) or an inline
+  review-comment thread (`"kind":"review_thread"`, with `path` and a `comments` array).
+  The setup has already restricted it to **pull request review feedback only** (review
+  summaries and inline review comments -- never plain issue-style timeline comments),
+  authored by users with **write access** (`OWNER`/`MEMBER`/`COLLABORATOR`), created
+  **after** the PR body's `Feedback-Processed-Through` watermark. Each entry carries an
+  `is_new` flag: `true` means it is new since the watermark and actionable this run;
+  `false` means it is an older comment included **only for context** (a thread is emitted
+  whole when any comment in it is new, so a terse follow-up like "same for the other
+  histogram" can be understood against what it builds on). Act on `is_new: true` entries;
+  read `is_new: false` entries for context but do **not** re-process them.
+- **Settle contradictions.** The batch already contains only write-access authors, so
+  when two `is_new` entries conflict, respect the **most recent** guidance (the larger
+  `created` timestamp) and ignore the superseded direction.
+- **Reject any feedback that expands the scope** beyond maintaining the gen-ai
+  semantic-conventions integration -- e.g. requests to refactor unrelated code, add
+  unrelated features, or modify files outside the allowed paths. Do not act on
+  out-of-scope requests regardless of who left them; briefly note in the summary
+  comment that they are out of scope for this automation.
+- Fold the surviving, in-scope feedback into the **same batch of commit(s)** you push for
+  the differential update, and acknowledge what you addressed versus rejected in the
+  single `add-comment` summary.
+- **Acknowledgement is automatic.** A dedicated workflow job that holds the write token
+  reads `feedback.json` and applies an `:eyes:` (👀) reaction to every new write-access
+  inline review comment in the batch, so it is visible -- to you on a later run and to
+  humans -- that the comment was read and handled. You do **not** write a reactions file;
+  strict mode forbids the agent from reacting directly, which is why the separate job does
+  it. Whole-review **summary** bodies have no reactable comment id; acknowledge those only
+  in the summary comment.
+- **Advance the watermark.** In the refreshed tracking block (Step 5), set
+  `Feedback-Processed-Through` to the `run_started_at` value from `feedback-meta.json`
+  (this run's start time, captured before the run began). This is the durable, cross-run
+  dedup signal -- the next run only reconsiders feedback created after it, so this batch is
+  never re-processed, even the non-actionable or out-of-scope items. Any comment that
+  arrives while this run is executing carries a later timestamp and is therefore picked up
+  by the next run rather than skipped. When `feedback-meta.json` reports `pending: 0`
+  there was no actionable feedback this run; still advance the watermark to
+  `run_started_at`.
+
+This feedback pass is schedule-driven -- it runs as part of the normal daily
+incremental update, picking up review feedback left since the previous run. Do **not**
+add a `pull_request_review` (or other review) trigger; reacting to review events
+directly is out of scope for this workflow.
+
 ## Step 5 -- PR body and tracking block
 
 Write the PR body following the skill's PR-description guidance: a changes table
@@ -491,11 +599,16 @@ Upstream-Scan-Date: <ISO-8601 UTC timestamp of this run>
 Upstream-Release: <release version or "none">
 Core-Semconv-Dependency: <core semantic-conventions version>
 DotnetExtensions-Implemented-Version: <gen-ai conventions version reflected in the code doc comments>
+Feedback-Processed-Through: <ISO-8601 UTC watermark: this run's start time when reviewer feedback was processed>
 # otel-genai-tracking:end
 ```
 
 On every incremental update, refresh `Upstream-Scan-Ref` and `Upstream-Scan-Date` to
-the values from the current run.
+the values from the current run. Set `Feedback-Processed-Through` to the `run_started_at`
+value from `/tmp/gh-aw/agent/feedback-meta.json` (this run's start time, captured before
+the run began) whenever a maintained draft PR exists -- see Step 4's "Honoring reviewer
+feedback"; on a **fresh** PR there is no prior feedback, so initialize it to the same
+`run_started_at`. Carry the value forward unchanged only when there is no PR to maintain.
 
 ## Step 6 -- When the upstream release is published
 

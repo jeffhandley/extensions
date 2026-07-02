@@ -8,11 +8,15 @@
 #   2. Discovers the maintained draft PR and classifies it: OURS (carries our tracking
 #      marker), BLOCKED (a non-automation PR occupying our branch -- a human owns it),
 #      or NONE.
-#   3. Reads the PR's recorded Upstream-Scan-Ref and Upstream-Release, and computes a
-#      recommended lifecycle action.
+#   3. Reads the PR's recorded Upstream-Scan-Ref, Upstream-Release, and
+#      Feedback-Processed-Through watermark, and computes a recommended lifecycle action.
+#   4. Builds the reviewer-feedback batch (submitted review summaries + inline
+#      review-comment threads created after the watermark, from write-access authors).
 #
 # Writes (under $AGENT_DIR, uploaded in the agent artifact so downstream jobs read them):
 #   target.json         resolved scan target + PR discovery + recommended action
+#   feedback.json       JSON array of the reviewer-feedback batch ([] when empty)
+#   feedback-meta.json  {"pr":..,"watermark":..,"run_started_at":..,"pending":..}
 #
 # The recommended action lets a caught-up run early-noop before the expensive build. The
 # agent's Step 3 remains authoritative and refines edge cases (e.g. release-gate mark-ready).
@@ -35,8 +39,17 @@ TARGET_JSON="${TARGET_JSON:-}"
 UPSTREAM_REF="${UPSTREAM_REF:-}"
 mkdir -p "$AGENT_DIR"
 target_file="$AGENT_DIR/target.json"
+feedback_file="$AGENT_DIR/feedback.json"
+meta_file="$AGENT_DIR/feedback-meta.json"
+echo '[]' >"$feedback_file"
 
 run_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+write_meta() {
+	# $1=pr $2=watermark $3=pending
+	jq -cn --arg pr "$1" --arg wm "$2" --arg rs "$run_started_at" --argjson pending "$3" \
+		'{pr:$pr, watermark:$wm, run_started_at:$rs, pending:$pending}' >"$meta_file"
+}
 
 # ---- 1. Resolve the upstream scan target -------------------------------------------
 UPSTREAM_REPO="open-telemetry/semantic-conventions-genai"
@@ -78,7 +91,7 @@ fi
 
 write_target() {
 	# $1=pr $2=pr_state $3=pr_is_draft $4=pr_recorded_sha $5=pr_recorded_release
-	# $6=classification(ours|blocked|none) $7=action
+	# $6=classification(ours|blocked|none) $7=action $8=pending
 	jq -cn \
 		--arg upstream_repo "$UPSTREAM_REPO" --arg upstream_ref "$UPSTREAM_REF" \
 		--arg upstream_sha "$upstream_sha" --arg upstream_release "$upstream_release" \
@@ -86,16 +99,17 @@ write_target() {
 		--arg pr "$1" --arg pr_state "$2" --argjson pr_is_draft "${3:-false}" \
 		--arg pr_recorded_sha "$4" --arg pr_recorded_release "$5" \
 		--arg classification "$6" --arg action "$7" \
-		--arg run_started_at "$run_started_at" \
+		--arg watermark "${watermark:-}" --arg run_started_at "$run_started_at" \
+		--argjson pending "$8" \
 		'{upstream_repo:$upstream_repo, upstream_ref:$upstream_ref, upstream_sha:$upstream_sha,
 		  upstream_release:$upstream_release, desired_branch:$desired_branch, marker_id:$marker_id,
 		  pr:$pr, pr_state:$pr_state, pr_is_draft:$pr_is_draft, pr_recorded_sha:$pr_recorded_sha,
 		  pr_recorded_release:$pr_recorded_release, classification:$classification, action:$action,
-		  run_started_at:$run_started_at}' >"$target_file"
+		  watermark:$watermark, run_started_at:$run_started_at, pending:$pending}' >"$target_file"
 }
 
 step_summary() {
-	# $1=classification $2=action $3=pr $4=pr_recorded_sha
+	# $1=classification $2=action $3=pr $4=pr_recorded_sha $5=pending
 	{
 		echo "## Otel GenAI producer -- setup decision"
 		echo ""
@@ -109,13 +123,17 @@ step_summary() {
 		echo "| PR recorded SHA | \`${4:-<none>}\` |"
 		echo "| classification | **${1}** |"
 		echo "| recommended action | **${2}** |"
+		echo "| pending feedback | ${5} |"
 	} >>"${GITHUB_STEP_SUMMARY:-/dev/null}" 2>/dev/null || true
 }
 
+watermark=""
+
 if [ -z "$REPO" ] || [ -z "${GH_TOKEN:-}" ]; then
 	echo "GITHUB_REPOSITORY or GH_TOKEN unset; cannot discover PR -- defaulting to produce (fresh)"
-	write_target "" "" false "" "" "none" "produce"
-	step_summary "none" "produce" "" ""
+	write_meta "" "" 0
+	write_target "" "" false "" "" "none" "produce" 0
+	step_summary "none" "produce" "" "" 0
 	exit 0
 fi
 
@@ -153,6 +171,9 @@ fi
 # ---- 3. Read recorded state + compute the recommended action -----------------------
 pr_recorded_sha="" pr_recorded_release=""
 if [ -n "$pr" ] && [ "$classification" != "blocked" ]; then
+	watermark="$(printf '%s\n' "$body" \
+		| sed -n 's/^[[:space:]]*Feedback-Processed-Through:[[:space:]]*//p' \
+		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
 	pr_recorded_sha="$(printf '%s\n' "$body" \
 		| sed -n 's/^[[:space:]]*Upstream-Scan-Ref:[[:space:]]*//p' \
 		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
@@ -161,7 +182,43 @@ if [ -n "$pr" ] && [ "$classification" != "blocked" ]; then
 		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
 fi
 
-# ---- 4. Recommended lifecycle action ------------------------------------------------
+# ---- 4. Build the reviewer-feedback batch (write-access review feedback since watermark)
+pending=0
+if [ -n "$pr" ] && [ "$classification" != "blocked" ]; then
+	tmp="$(mktemp)"
+	{
+		gh api "repos/${REPO}/pulls/${pr}/comments" --paginate \
+			-q '.[]|{id:.id,in_reply_to_id:.in_reply_to_id,created:.created_at,assoc:.author_association,type:.user.type,kind:"review_comment",author:.user.login,url:.html_url,path:.path,body:.body}' 2>/dev/null || true
+		gh api "repos/${REPO}/pulls/${pr}/reviews" --paginate \
+			-q '.[]|{id:.id,created:.submitted_at,assoc:.author_association,type:.user.type,kind:"review",author:.user.login,url:.html_url,state:.state,body:.body}' 2>/dev/null || true
+	} >"$tmp"
+
+	jq -s --arg since "$watermark" '
+		def wa: (.assoc=="OWNER" or .assoc=="MEMBER" or .assoc=="COLLABORATOR");
+		def human: (.type != "Bot");
+		def hasbody: ((.body // "") != "");
+		def isnew: ($since=="" or ((.created // "") > $since));
+		[ .[]
+			| select(.kind=="review")
+			| select(human and wa and hasbody and isnew)
+			| {kind, id, author, assoc, created, url, state:(.state // null), body, is_new:true, _sort:(.created // "")}
+		]
+		+
+		( [ .[] | select(.kind=="review_comment") ]
+			| group_by(.in_reply_to_id // .id)
+			| map( select( any(.[]; human and wa and hasbody and isnew) )
+						 | { kind:"review_thread",
+								 path:(.[0].path // null),
+								 comments:[ .[] | select(human and hasbody)
+															| {id, author, assoc, created, url, body, is_new:isnew} ],
+								 _sort:( [ .[].created ] | max ) } )
+		)
+		| sort_by(._sort) | map(del(._sort))' "$tmp" >"$feedback_file" 2>/dev/null || echo '[]' >"$feedback_file"
+	rm -f "$tmp"
+	pending="$(jq 'length' "$feedback_file" 2>/dev/null || echo 0)"
+fi
+
+# ---- 5. Recommended lifecycle action ------------------------------------------------
 # Only a high-confidence caught-up state early-noops; every uncertain case produces so
 # the agent can make the real zero-delta / release-gate decision in Steps 2-3.
 action="produce"
@@ -175,6 +232,7 @@ case "$classification" in
 		[ "$upstream_release" != "none" ] && [ "$upstream_release" != "$pr_recorded_release" ] && release_changed="true"
 		if [ -n "$upstream_sha" ] && [ -n "$pr_recorded_sha" ] \
 			&& [ "$upstream_sha" = "$pr_recorded_sha" ] \
+			&& [ "$pending" -eq 0 ] \
 			&& [ "$release_changed" != "true" ]; then
 			action="noop"
 		else
@@ -182,8 +240,10 @@ case "$classification" in
 		fi ;;
 esac
 
-write_target "$pr" "open" "$pr_is_draft" "$pr_recorded_sha" "$pr_recorded_release" "$classification" "$action"
-step_summary "$classification" "$action" "${pr:-}" "$pr_recorded_sha"
+write_meta "$pr" "$watermark" "$pending"
+write_target "$pr" "open" "$pr_is_draft" "$pr_recorded_sha" "$pr_recorded_release" "$classification" "$action" "$pending"
+step_summary "$classification" "$action" "${pr:-}" "$pr_recorded_sha" "$pending"
 
-echo "Setup: classification=${classification} action=${action} pr=${pr:-<none>} recorded_sha=${pr_recorded_sha:-<none>} upstream_sha=${upstream_sha:-<none>}"
+echo "Setup: classification=${classification} action=${action} pr=${pr:-<none>} recorded_sha=${pr_recorded_sha:-<none>} upstream_sha=${upstream_sha:-<none>} pending=${pending}"
 echo "-- target.json --"; jq '.' "$target_file"
+echo "-- feedback.json --"; jq '.' "$feedback_file"
