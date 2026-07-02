@@ -38,6 +38,7 @@ safe-outputs:
     body: true
   add-comment:
     target: "*"
+    required-labels: [automation, area-ai]
     max: 1
   mark-pull-request-as-ready-for-review:
     target: "*"

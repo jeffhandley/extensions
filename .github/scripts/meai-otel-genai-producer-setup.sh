@@ -191,13 +191,13 @@ pr_recorded_sha="" pr_recorded_release=""
 if [ -n "$pr" ] && [ "$classification" != "blocked" ] && [ "$body_ok" = "true" ]; then
 	watermark="$(printf '%s\n' "$body" \
 		| sed -n 's/^[[:space:]]*Feedback-Processed-Through:[[:space:]]*//p' \
-		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
+		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//')"
 	pr_recorded_sha="$(printf '%s\n' "$body" \
 		| sed -n 's/^[[:space:]]*Upstream-Scan-Ref:[[:space:]]*//p' \
-		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
+		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//')"
 	pr_recorded_release="$(printf '%s\n' "$body" \
 		| sed -n 's/^[[:space:]]*Upstream-Release:[[:space:]]*//p' \
-		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
+		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*#.*$//; s/[[:space:]]*$//')"
 fi
 
 # ---- 4. Build the reviewer-feedback batch (write-access review feedback since watermark)
