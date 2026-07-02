@@ -142,7 +142,7 @@ fi
 # List open PRs on our evergreen branch (lightweight fields only -- never bulk-fetch
 # bodies). Consider BOTH automation+area-ai PRs (ours or bootstrapped) and any other PR
 # occupying the branch (human-owned -> blocked). Retry so a blip never drops the PR.
-pr="" pr_labels="" pr_is_draft="false" classification="none"
+pr="" pr_labels="" pr_is_draft="false" classification="none" body_ok="false"
 for attempt in 1 2 3; do
 	rows="$(gh pr list --repo "$REPO" --state open \
 		--json number,headRefName,isDraft,labels,updatedAt \
@@ -157,10 +157,24 @@ pr="$(jq -r '(.[0].number) // empty' <<<"$rows" 2>/dev/null || true)"
 if [ -n "$pr" ]; then
 	pr_is_draft="$(jq -r '.[0].isDraft // false' <<<"$rows")"
 	has_automation="$(jq -r '[.[0].labels[].name] | (index("automation") != null) and (index("area-ai") != null)' <<<"$rows")"
-	body="$(gh pr view "$pr" --repo "$REPO" --json body -q '.body' 2>/dev/null || true)"
+	# Fetch the PR body with retries. A transient blip must not drop our tracking
+	# marker -- that would misclassify our own PR as a fresh adopt and replay feedback
+	# off a phantom watermark; body_ok tells a real empty body from a failed fetch.
+	body="" body_ok="false"
+	for battempt in 1 2 3; do
+		if body="$(gh pr view "$pr" --repo "$REPO" --json body -q '.body' 2>/dev/null)"; then
+			body_ok="true"; break
+		fi
+		[ "$battempt" -lt 3 ] && sleep 2
+	done
 	has_marker="false"
 	printf '%s' "$body" | grep -q "${MARKER_ID}-tracking:begin" && has_marker="true"
-	if [ "$has_automation" = "true" ] && [ "$has_marker" = "true" ]; then
+	if [ "$body_ok" != "true" ] && [ "$has_automation" = "true" ]; then
+		# Body unreadable after retries but our automation labels are present: almost
+		# certainly our own PR mid-blip. Treat as ours -- the agent re-reads the real
+		# body and reconciles -- rather than re-adopting or replaying stale feedback.
+		classification="ours"
+	elif [ "$has_automation" = "true" ] && [ "$has_marker" = "true" ]; then
 		classification="ours"
 	elif [ "$has_automation" = "true" ] && [ "$has_marker" != "true" ]; then
 		# Automation-labeled PR on our branch with no tracking marker yet: a human
@@ -174,7 +188,7 @@ fi
 
 # ---- 3. Read recorded state + compute the recommended action -----------------------
 pr_recorded_sha="" pr_recorded_release=""
-if [ -n "$pr" ] && [ "$classification" != "blocked" ]; then
+if [ -n "$pr" ] && [ "$classification" != "blocked" ] && [ "$body_ok" = "true" ]; then
 	watermark="$(printf '%s\n' "$body" \
 		| sed -n 's/^[[:space:]]*Feedback-Processed-Through:[[:space:]]*//p' \
 		| head -1 | tr -d '"'\''\r' | sed 's/[[:space:]]*$//')"
@@ -188,7 +202,7 @@ fi
 
 # ---- 4. Build the reviewer-feedback batch (write-access review feedback since watermark)
 pending=0
-if [ -n "$pr" ] && [ "$classification" != "blocked" ]; then
+if [ -n "$pr" ] && [ "$classification" != "blocked" ] && [ "$body_ok" = "true" ]; then
 	tmp="$(mktemp)"
 	{
 		gh api "repos/${REPO}/pulls/${pr}/comments" --paginate \

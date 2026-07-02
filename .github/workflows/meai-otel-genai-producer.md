@@ -69,6 +69,7 @@ checkout:
 
 concurrency:
   group: meai-otel-genai-producer
+  cancel-in-progress: false
 
 # Only run on a schedule for the canonical (non-fork) repository; allow manual
 # dispatch anywhere (e.g. for testing in a fork).
