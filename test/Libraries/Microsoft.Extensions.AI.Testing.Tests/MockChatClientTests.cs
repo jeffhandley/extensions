@@ -361,53 +361,80 @@ public class MockChatClientTests
     }
 
     [Fact]
-    public async Task MockEmbeddingGenerator_GeneratesRepeatableVectors()
+    public async Task MockEmbeddingGenerator_InvokesConfiguredCallbackAndRecordsCall()
     {
-        using var generator = new MockEmbeddingGenerator(4);
+        var values = new List<string> { "trail", "camp" };
+        var options = new EmbeddingGenerationOptions();
+        using var cancellationTokenSource = new CancellationTokenSource();
+        var expected = new GeneratedEmbeddings<Embedding<float>>([new(new float[] { 1, 2, 3, 4 })]);
 
-        GeneratedEmbeddings<Embedding<float>> embeddings = await generator.GenerateAsync(["trail", "trail", "camp"]);
+        using var generator = new MockEmbeddingGenerator<string>
+        {
+            GenerateAsyncCallback = (actualValues, actualOptions, cancellationToken) =>
+            {
+                Assert.Same(values, actualValues);
+                Assert.Same(options, actualOptions);
+                Assert.Equal(cancellationTokenSource.Token, cancellationToken);
+                return Task.FromResult(expected);
+            },
+        };
 
-        Assert.Equal(3, embeddings.Count);
-        Assert.Equal(4, embeddings[0].Vector.Length);
-        Assert.Equal(embeddings[0].Vector.ToArray(), embeddings[1].Vector.ToArray());
-        Assert.NotEqual(embeddings[0].Vector.ToArray(), embeddings[2].Vector.ToArray());
+        Assert.Same(expected, await generator.GenerateAsync(values, options, cancellationTokenSource.Token));
+        Assert.Equal(1, generator.CallCount);
     }
 
     [Fact]
-    public async Task MockEmbeddingGenerator_PrefersLexicallySimilarText()
+    public async Task MockEmbeddingGenerator_SupportsGenericInputs()
     {
-        using var generator = new MockEmbeddingGenerator(64);
+        var value = new object();
+        var expected = new GeneratedEmbeddings<Embedding<float>>([new(new float[] { 1, 2, 3, 4 })]);
+        using var generator = new MockEmbeddingGenerator<object>
+        {
+            GenerateAsyncCallback = (values, _, _) =>
+            {
+                Assert.Same(value, Assert.Single(values));
+                return Task.FromResult(expected);
+            },
+        };
 
-        GeneratedEmbeddings<Embedding<float>> embeddings = await generator.GenerateAsync(
-        [
-            "TrailMaster GPS Watch supports offline maps",
-            "Emergency survival kits include water treatment",
-            "TrailMaster GPS Watch provides location tracking",
-        ]);
-
-        Assert.True(
-            CosineSimilarity(embeddings[0], embeddings[2]) > CosineSimilarity(embeddings[0], embeddings[1]));
+        Assert.Same(expected, await generator.GenerateAsync([value]));
     }
 
     [Fact]
-    public void MockEmbeddingGenerator_RequiresPositiveDimensions()
+    public async Task MockEmbeddingGenerator_RecordsCallsForDerivedGenerators()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new MockEmbeddingGenerator(0));
+        var expected = new GeneratedEmbeddings<Embedding<float>>([new(new float[] { 1, 2, 3, 4 })]);
+        using var generator = new DerivedMockEmbeddingGenerator(expected);
+
+        Assert.Same(expected, await generator.GenerateAsync(["trail"]));
+        Assert.Equal(1, generator.CallCount);
+    }
+
+    [Fact]
+    public void MockEmbeddingGenerator_ConfiguresServiceResolution()
+    {
+        using var generator = new MockEmbeddingGenerator<string>();
+        Assert.Same(generator, generator.GetService(typeof(MockEmbeddingGenerator<string>)));
+
+        var expected = new object();
+        generator.GetServiceCallback = static (_, _) => null;
+        Assert.Null(generator.GetService(typeof(object)));
+
+        generator.GetServiceCallback = (_, _) => expected;
+        Assert.Same(expected, generator.GetService(typeof(object)));
+    }
+
+    private sealed class DerivedMockEmbeddingGenerator(GeneratedEmbeddings<Embedding<float>> expected) : MockEmbeddingGenerator<string>
+    {
+        protected override Task<GeneratedEmbeddings<Embedding<float>>> GenerateCoreAsync(
+            IEnumerable<string> values,
+            EmbeddingGenerationOptions? options,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(expected);
     }
 
     private static Task<ChatResponse> CreateResponseAsync(string text) =>
         Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)));
-
-    private static float CosineSimilarity(Embedding<float> left, Embedding<float> right)
-    {
-        float similarity = 0;
-        for (int i = 0; i < left.Vector.Length; i++)
-        {
-            similarity += left.Vector.Span[i] * right.Vector.Span[i];
-        }
-
-        return similarity;
-    }
 
     private static async IAsyncEnumerable<ChatResponseUpdate> EnumerateUpdatesAsync(IEnumerable<ChatResponseUpdate> updates)
     {

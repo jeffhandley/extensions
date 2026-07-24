@@ -103,7 +103,8 @@
         "condition": "(!IsMock)",
         "exclude": [
           "AIChatWeb-CSharp.Web/Services/MockServices.cs",
-          "AIChatWeb-CSharp.Web/Services/MockChatClientExtensions.cs"
+          "AIChatWeb-CSharp.Web/Services/MockChatClientExtensions.cs",
+          "AIChatWeb-CSharp.Web/Services/LexicalMockEmbeddingGenerator.cs"
         ]
       }
     ]

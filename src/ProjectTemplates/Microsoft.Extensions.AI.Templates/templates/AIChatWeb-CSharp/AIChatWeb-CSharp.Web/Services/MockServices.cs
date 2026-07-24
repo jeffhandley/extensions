@@ -116,7 +116,7 @@ internal static class MockServices
                 includeCitation: true);
 
     internal static IEmbeddingGenerator<string, Embedding<float>> CreateEmbeddingGenerator() =>
-        new MockEmbeddingGenerator(IngestedChunk.VectorDimensions);
+        new LexicalMockEmbeddingGenerator(IngestedChunk.VectorDimensions);
 
     private static bool LastQuestionContains(MockChatClientRequest request, params string[] terms)
     {

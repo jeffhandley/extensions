@@ -327,8 +327,21 @@ public class MockChatClient : IChatClient
     }
 
     /// <summary>Disposes this instance and clears all seeds and recorded requests.</summary>
-    public virtual void Dispose()
+    public void Dispose()
     {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>Releases resources used by this mock client.</summary>
+    /// <param name="disposing"><see langword="true"/> when called from <see cref="Dispose()"/>.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposing)
+        {
+            return;
+        }
+
         lock (_sync)
         {
             _disposed = true;

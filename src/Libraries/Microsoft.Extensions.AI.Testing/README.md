@@ -23,7 +23,7 @@ Or in a project file:
 
 - `MockChatClient` (`IChatClient`) for deterministic, request-aware chat responses.
 - `MockChatClientRequest` for request matching and request-history inspection.
-- `MockEmbeddingGenerator` (`IEmbeddingGenerator<string, Embedding<float>>`) for repeatable pseudo-embeddings with lexical similarity.
+- `MockEmbeddingGenerator<TInput>` (`IEmbeddingGenerator<TInput, Embedding<float>>`) for configurable, deterministic embeddings.
 
 ## MockChatClient behavior
 
@@ -172,12 +172,21 @@ client.AddException(
 
 ## Mock embeddings
 
-Construct `MockEmbeddingGenerator` with the required vector dimension. It produces a repeatable vector for every input, making it useful for deterministic vector-data tests and local demos. The vectors model lexical overlap, not semantic meaning.
+Configure `MockEmbeddingGenerator<TInput>` with the embeddings a test needs. Its callback receives the original input enumerable and cancellation token, and `CallCount` records generation requests.
 
 ```csharp
-using var embeddings = new MockEmbeddingGenerator(dimensions: 384);
-GeneratedEmbeddings<Embedding<float>> result = await embeddings.GenerateAsync(["trail", "navigation"]);
+using var embeddings = new MockEmbeddingGenerator<string>
+{
+    GenerateAsyncCallback = static (_, _, _) =>
+        Task.FromResult<GeneratedEmbeddings<Embedding<float>>>(
+            [new(new float[] { 0.1f, 0.2f, 0.3f })]),
+};
+
+GeneratedEmbeddings<Embedding<float>> result = await embeddings.GenerateAsync(["trail"]);
+Console.WriteLine(embeddings.CallCount);
 ```
+
+Use the input type required by the test, such as `MockEmbeddingGenerator<string>` or `MockEmbeddingGenerator<DataContent>`.
 
 ## Feedback & Contributing
 
