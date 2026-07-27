@@ -213,4 +213,28 @@
   <data name="InternalReferencedInPublicDocTitle" xml:space="preserve">
     <value>Externally visible documentation references internals</value>
   </data>
+  <data name="ExperimentalMemberMustBeJsonIgnoredDescription" xml:space="preserve">
+    <value>A member marked [Experimental] on a type that participates in a [JsonPolymorphic] hierarchy is emitted into the JSON metadata that System.Text.Json's source generator produces for any consumer whose JsonSerializerContext includes the polymorphic base type, forcing that consumer to suppress the experimental diagnostic. Annotate the public property with [JsonIgnore], route its value through an internal property, and annotate the internal property with [JsonInclude] and [JsonPropertyName]. Use the code fixer to apply this change.</value>
+  </data>
+  <data name="ExperimentalMemberMustBeJsonIgnoredMessage" xml:space="preserve">
+    <value>Experimental member '{0}' on JSON-polymorphic type '{1}' leaks into consumers' source-generated JSON metadata. Annotate the public property with [JsonIgnore], route its value through an internal property, and annotate the internal property with [JsonInclude] and [JsonPropertyName]. Use the code fixer to apply this change.</value>
+  </data>
+  <data name="ExperimentalMemberMustBeJsonIgnoredTitle" xml:space="preserve">
+    <value>Experimental member in a polymorphic JSON hierarchy must be [JsonIgnore]'d</value>
+  </data>
+  <data name="ExperimentalTypeMustNotBeJsonDerivedTypeDescription" xml:space="preserve">
+    <value>A [JsonDerivedType] registration that references an [Experimental] type is emitted into the JSON metadata that System.Text.Json's source generator produces for any consumer whose JsonSerializerContext includes the polymorphic base type, forcing that consumer to suppress the experimental diagnostic. Register experimental derived types at runtime instead of via a static [JsonDerivedType] attribute: for AIContent-rooted types use AIJsonUtilities.AddAIContentType; for any other polymorphic root, add a JsonDerivedType for the experimental type to the base's JsonTypeInfo.PolymorphismOptions.DerivedTypes from a JsonSerializerOptions.TypeInfoResolver modifier.</value>
+  </data>
+  <data name="ExperimentalTypeMustNotBeJsonDerivedTypeMessage" xml:space="preserve">
+    <value>Experimental type '{0}' is statically registered as a [JsonDerivedType] on '{1}'; consumers whose source-generated JsonSerializerContext includes '{1}' will leak it. Register '{0}' at runtime instead of via a static [JsonDerivedType] attribute.</value>
+  </data>
+  <data name="ExperimentalTypeMustNotBeJsonDerivedTypeTitle" xml:space="preserve">
+    <value>Experimental type must not be a statically registered [JsonDerivedType]</value>
+  </data>
+  <data name="ExperimentalMemberMustBeJsonIgnoredFixTitle" xml:space="preserve">
+    <value>Route serialization through a non-experimental internal member</value>
+  </data>
+  <data name="ExperimentalTypeMustNotBeJsonDerivedTypeFixTitle" xml:space="preserve">
+    <value>Remove the static [JsonDerivedType] registration and register the experimental type at runtime</value>
+  </data>
 </root>

@@ -111,6 +111,22 @@ internal static class DiagDescriptors
         description: Resources.InternalReferencedInPublicDocDescription,
         defaultSeverity: DiagnosticSeverity.Warning);
 
+    public static DiagnosticDescriptor ExperimentalMemberMustBeJsonIgnored { get; } = Make(
+        id: "LA0009",
+        messageFormat: Resources.ExperimentalMemberMustBeJsonIgnoredMessage,
+        title: Resources.ExperimentalMemberMustBeJsonIgnoredTitle,
+        category: Correctness,
+        description: Resources.ExperimentalMemberMustBeJsonIgnoredDescription,
+        defaultSeverity: DiagnosticSeverity.Warning);
+
+    public static DiagnosticDescriptor ExperimentalTypeMustNotBeJsonDerivedType { get; } = Make(
+        id: "LA0010",
+        messageFormat: Resources.ExperimentalTypeMustNotBeJsonDerivedTypeMessage,
+        title: Resources.ExperimentalTypeMustNotBeJsonDerivedTypeTitle,
+        category: Correctness,
+        description: Resources.ExperimentalTypeMustNotBeJsonDerivedTypeDescription,
+        defaultSeverity: DiagnosticSeverity.Warning);
+
     private static DiagnosticDescriptor Make(string id, string title, string description, string messageFormat, string category, DiagnosticSeverity defaultSeverity)
         => new(id, title, messageFormat, category, defaultSeverity, true, description);
 }

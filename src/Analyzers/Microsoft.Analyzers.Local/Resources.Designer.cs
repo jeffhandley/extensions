@@ -142,6 +142,78 @@ namespace Microsoft.Extensions.LocalAnalyzers {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to A member marked [Experimental] on a type that participates in a [JsonPolymorphic] hierarchy is emitted into the JSON metadata that System.Text.Json&apos;s source generator produces for any consumer whose JsonSerializerContext includes the polymorphic base type....
+        /// </summary>
+        internal static string ExperimentalMemberMustBeJsonIgnoredDescription {
+            get {
+                return ResourceManager.GetString("ExperimentalMemberMustBeJsonIgnoredDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Experimental member &apos;{0}&apos; on JSON-polymorphic type &apos;{1}&apos; leaks into consumers&apos; source-generated JSON metadata; mark it [JsonIgnore] and route serialization through a non-experimental internal member.
+        /// </summary>
+        internal static string ExperimentalMemberMustBeJsonIgnoredMessage {
+            get {
+                return ResourceManager.GetString("ExperimentalMemberMustBeJsonIgnoredMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Experimental member in a polymorphic JSON hierarchy must be [JsonIgnore]&apos;d.
+        /// </summary>
+        internal static string ExperimentalMemberMustBeJsonIgnoredTitle {
+            get {
+                return ResourceManager.GetString("ExperimentalMemberMustBeJsonIgnoredTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to A [JsonDerivedType] registration that references an [Experimental] type is emitted into the JSON metadata that System.Text.Json&apos;s source generator produces for any consumer whose JsonSerializerContext includes the polymorphic base type....
+        /// </summary>
+        internal static string ExperimentalTypeMustNotBeJsonDerivedTypeDescription {
+            get {
+                return ResourceManager.GetString("ExperimentalTypeMustNotBeJsonDerivedTypeDescription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Experimental type &apos;{0}&apos; is statically registered as a [JsonDerivedType] on &apos;{1}&apos;; consumers whose source-generated JsonSerializerContext includes &apos;{1}&apos; will leak it. Register &apos;{0}&apos; at runtime instead of via a static [JsonDerivedType] attribute.
+        /// </summary>
+        internal static string ExperimentalTypeMustNotBeJsonDerivedTypeMessage {
+            get {
+                return ResourceManager.GetString("ExperimentalTypeMustNotBeJsonDerivedTypeMessage", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Experimental type must not be a statically registered [JsonDerivedType].
+        /// </summary>
+        internal static string ExperimentalTypeMustNotBeJsonDerivedTypeTitle {
+            get {
+                return ResourceManager.GetString("ExperimentalTypeMustNotBeJsonDerivedTypeTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Route serialization through a non-experimental internal member.
+        /// </summary>
+        internal static string ExperimentalMemberMustBeJsonIgnoredFixTitle {
+            get {
+                return ResourceManager.GetString("ExperimentalMemberMustBeJsonIgnoredFixTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Remove the static [JsonDerivedType] registration and register the experimental type at runtime.
+        /// </summary>
+        internal static string ExperimentalTypeMustNotBeJsonDerivedTypeFixTitle {
+            get {
+                return ResourceManager.GetString("ExperimentalTypeMustNotBeJsonDerivedTypeFixTitle", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Symbols being added to the public API of an assembly must be marked as experimental until they have been appoved.
         /// </summary>
         internal static string NewSymbolsMustBeMarkedExperimentalDescription {
